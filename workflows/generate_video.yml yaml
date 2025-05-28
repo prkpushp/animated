@@ -1,0 +1,43 @@
+name: Generate Animated Video
+
+on:
+  schedule:
+    - cron: '30 8 * * *' # 2 PM IST (8:30 AM UTC)
+    - cron: '30 12 * * *' # 6 PM IST (12:30 PM UTC)
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  generate-video:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Set up Google Cloud SDK
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          service_account_key: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
+          project_id: omega-episode-454707-j5
+
+      # Install dependencies
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg jq
+          gcloud components install gsutil
+
+      # Run script
+      - name: Run video generation script
+        run: |
+          chmod +x generate_veo2_video_locally_with_animated_animals_and_music.sh
+          ./generate_veo2_video_locally_with_animated_animals_and_music.sh
+
+      # Upload video as artifact
+      - name: Upload video artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: animated-video
+          path: ./videos/*.mp4
+          retention-days: 7
