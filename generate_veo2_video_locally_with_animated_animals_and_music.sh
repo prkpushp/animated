@@ -98,7 +98,7 @@ ATMOSPHERE=$(printf "%s\n" "${ATMOSPHERES[@]}" | shuf -n 1)
 VISUAL_STYLE=$(printf "%s\n" "${VISUAL_STYLES[@]}" | shuf -n 1)
 
 # Construct elaborative prompt for animated characters
-PROMPT="In a ${SETTING}, an animated ${ANIMAL1} ${ACTION_STYLE} an animated ${ANIMAL2}, their exaggerated expressions and movements vivid ${ATMOSPHERE}, rendered ${VISUAL_STYLE}"
+PROMPT="In a ${SETTING}, an animated Disney Pixar 3D Style ${ANIMAL1} ${ACTION_STYLE} an animated ${ANIMAL2}, their exaggerated expressions and movements vivid ${ATMOSPHERE}, rendered ${VISUAL_STYLE}"
 
 # Sanitize prompt for filename (replace spaces with underscores, remove special characters)
 SANITIZED_PROMPT=$(echo "$PROMPT" | tr ' ' '_' | tr -dc '[:alnum:]_-' | cut -c 1-200)
