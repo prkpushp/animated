@@ -29,7 +29,7 @@ jobs:
       - name: Set up Google Cloud CLI
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: gothic-envelope-458808   # <-- verify your actual project id here
+          project_id: gothic-envelope-458808   # <-- update to your actual project ID
           install_components: "beta"
 
       - name: Install tools
@@ -41,28 +41,18 @@ jobs:
         run: |
           mkdir -p output
           PROMPT="${{ inputs.prompt }}"
-          
+
           ACCESS_TOKEN=$(gcloud auth print-access-token)
 
-          # Safely encode prompt as JSON string
-          JSON_PROMPT=$(jq -Rn --arg p "$PROMPT" '$p')
+          jq -n --arg prompt "$PROMPT" '{
+            instances: [{ prompt: $prompt }],
+            parameters: {
+              maxOutputTokens: 256,
+              temperature: 0.8,
+              candidateCount: 1
+            }
+          }' > request.json
 
-          cat > request.json <<EOF
-{
-  "instances": [
-    {
-      "prompt": $JSON_PROMPT
-    }
-  ],
-  "parameters": {
-    "maxOutputTokens": 256,
-    "temperature": 0.8,
-    "candidateCount": 1
-  }
-}
-EOF
-
-          # Call the Imagen model endpoint - update region & project accordingly
           curl -s -X POST \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
@@ -72,7 +62,6 @@ EOF
 
           cat response.json | jq .
 
-          # Extract base64-encoded image bytes from response
           IMAGE_B64=$(jq -r '.predictions[0].imageBytesBase64' response.json)
 
           if [ "$IMAGE_B64" != "null" ] && [ -n "$IMAGE_B64" ]; then
