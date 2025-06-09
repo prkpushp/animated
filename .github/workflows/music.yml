@@ -1,0 +1,51 @@
+name: Generate Music with Vertex AI (Lyria 2)
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Music prompt (e.g., "An energetic baroque fugue with dubstep")'
+        required: true
+        type: string
+
+jobs:
+  generate-music:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate with Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
+          create_credentials_file: true
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: omega-episode-454707-j5
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          pip install google-cloud-aiplatform
+
+      - name: Run music generation script
+        env:
+          MUSIC_PROMPT: ${{ inputs.prompt }}
+        run: |
+          python generate_music.py
+
+      - name: Upload generated music
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyria-music
+          path: output/music.mp3
+          retention-days: 7
