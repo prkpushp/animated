@@ -1,15 +1,15 @@
-name: Generate Image with Vertex AI (Google Imagen)
+name: Generate Music with Vertex AI (Lyria 2)
 
 on:
   workflow_dispatch:
     inputs:
       prompt:
-        description: 'Image prompt (e.g., "A futuristic cityscape at sunset in watercolor style")'
+        description: 'Music prompt (e.g., "An energetic, dreamy piano melody with a lo-fi beat")'
         required: true
         type: string
 
 jobs:
-  generate-image:
+  generate-music:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -29,7 +29,7 @@ jobs:
       - name: Set up Google Cloud CLI
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: gothic-envelope-458808   # <-- verify your actual project id here
+          project_id: gothic-envelope-458808-h6
           install_components: "beta"
 
       - name: Install tools
@@ -37,33 +37,27 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y jq curl
 
-      - name: Generate image using Google Imagen
+      - name: Generate music using Vertex AI Lyria 2
         run: |
           mkdir -p output
           PROMPT="${{ inputs.prompt }}"
           
           ACCESS_TOKEN=$(gcloud auth print-access-token)
 
-          # Safely encode prompt as JSON string
-          JSON_PROMPT=$(jq -Rn --arg p "$PROMPT" '$p')
-
           cat > request.json <<EOF
-{
-  "instances": [
-    {
-      "prompt": $JSON_PROMPT
-    }
-  ],
-  "parameters": {
-    "maxOutputTokens": 256,
-    "temperature": 0.8,
-    "candidateCount": 1
-  }
-}
-EOF
+          {
+            "instances": [
+              {
+                "prompt": "$PROMPT"
+              }
+            ],
+            "parameters": {
+              "sampleCount": 1
+            }
+          }
+          EOF
 
-          # Call the Imagen model endpoint - update region & project accordingly
-          curl -s -X POST \
+          curl -X POST \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
             "https://us-central1-aiplatform.googleapis.com/v1/projects/gothic-envelope-458808-h6/locations/us-central1/publishers/google/models/lyria-002:predict" \
@@ -72,20 +66,19 @@ EOF
 
           cat response.json | jq .
 
-          # Extract base64-encoded image bytes from response
-          IMAGE_B64=$(jq -r '.predictions[0].imageBytesBase64' response.json)
+          AUDIO_B64=$(jq -r '.predictions[0].bytesBase64Encoded' response.json)
 
-          if [ "$IMAGE_B64" != "null" ] && [ -n "$IMAGE_B64" ]; then
-            echo "$IMAGE_B64" | base64 -d > output/image.png
-            echo "Image generated successfully."
+          if [ "$AUDIO_B64" != "null" ] && [ -n "$AUDIO_B64" ]; then
+            echo "$AUDIO_B64" | base64 -d > output/music.wav
+            echo "Music generated successfully."
           else
-            echo "Error: No image data returned."
+            echo "Error: No music data returned."
             exit 1
           fi
 
-      - name: Upload generated image
+      - name: Upload generated music
         uses: actions/upload-artifact@v4
         with:
-          name: imagen-generated-image
-          path: output/image.png
+          name: lyria-music
+          path: output/music.wav
           retention-days: 7
