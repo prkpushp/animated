@@ -29,7 +29,7 @@ jobs:
       - name: Set up Google Cloud CLI
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: gothic-envelope-458808   # <-- update to your actual project ID
+          project_id: gothic-envelope-458808-h6   # <-- update to your actual project ID
           install_components: "beta"
 
       - name: Install tools
