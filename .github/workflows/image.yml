@@ -1,0 +1,91 @@
+name: Generate Image with Vertex AI (Google Imagen)
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Image prompt (e.g., "A futuristic cityscape at sunset in watercolor style")'
+        required: true
+        type: string
+
+jobs:
+  generate-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate with Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
+          create_credentials_file: true
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: gothic-envelope-458808   # <-- verify your actual project id here
+          install_components: "beta"
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq curl
+
+      - name: Generate image using Google Imagen
+        run: |
+          mkdir -p output
+          PROMPT="${{ inputs.prompt }}"
+          
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+
+          # Safely encode prompt as JSON string
+          JSON_PROMPT=$(jq -Rn --arg p "$PROMPT" '$p')
+
+          cat > request.json <<EOF
+{
+  "instances": [
+    {
+      "prompt": $JSON_PROMPT
+    }
+  ],
+  "parameters": {
+    "maxOutputTokens": 256,
+    "temperature": 0.8,
+    "candidateCount": 1
+  }
+}
+EOF
+
+          # Call the Imagen model endpoint - update region & project accordingly
+          curl -s -X POST \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/gothic-envelope-458808/locations/us-central1/publishers/google/models/image-generation-1:predict" \
+            -d @request.json \
+            -o response.json
+
+          cat response.json | jq .
+
+          # Extract base64-encoded image bytes from response
+          IMAGE_B64=$(jq -r '.predictions[0].imageBytesBase64' response.json)
+
+          if [ "$IMAGE_B64" != "null" ] && [ -n "$IMAGE_B64" ]; then
+            echo "$IMAGE_B64" | base64 -d > output/image.png
+            echo "Image generated successfully."
+          else
+            echo "Error: No image data returned."
+            exit 1
+          fi
+
+      - name: Upload generated image
+        uses: actions/upload-artifact@v4
+        with:
+          name: imagen-generated-image
+          path: output/image.png
+          retention-days: 7
