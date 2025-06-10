@@ -56,7 +56,7 @@ jobs:
           curl -s -X POST \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
-            "https://us-central1-aiplatform.googleapis.com/v1/projects/gothic-envelope-458808/locations/us-central1/publishers/google/models/imagetext:predict" \
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/gothic-envelope-458808-h6/locations/us-central1/publishers/google/models/imagetext:predict" \
             -d @request.json \
             -o response.json
 
