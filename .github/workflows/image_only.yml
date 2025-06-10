@@ -50,9 +50,9 @@ jobs:
                 prompt: $prompt
               }
             ],
-            parameters: {
-              sampleCount: 1
-              aspectRatio: 16:9
+          "parameters": {
+            "sampleCount": 1,
+            "aspectRatio": "16:9"
             }
           }' > request.json
 
