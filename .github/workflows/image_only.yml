@@ -52,6 +52,7 @@ jobs:
             ],
             parameters: {
               sampleCount: 1
+              aspectRatio: 16:9
             }
           }' > request.json
 
