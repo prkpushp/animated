@@ -3,7 +3,7 @@ DATE=$(date +"%d%m%y")
 
 IMAGE=`ls output/*.png`
 AUDIO=`ls output/*.wav`
-OUTPUT="${DATE}video10.mp4"
+OUTPUT="output/${DATE}video10.mp4"
 DURATION=${1:-900}
 
 if [ ! -f "$IMAGE" ]; then
