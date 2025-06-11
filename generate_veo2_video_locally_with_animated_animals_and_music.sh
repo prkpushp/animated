@@ -60,14 +60,13 @@ SETTINGS=(
   "starlit desert with cacti and a glowing moon"
 )
 ACTION_STYLES=(
-  "cartoonishly brawling with exaggerated punches"
-  "fiercely chasing with comical trips and tumbles"
-  "darting and dodging with zany, stretchy moves"
-  "tumbling and sparring with bouncy, springy leaps"
-  "leaping and tussling with wild, loony spins"
-  "spinning and flipping with over-the-top flair"
+  "fighting"
+  "mocking"
+  "slapping"
+  "rebuking"
+  "carrying giant whales on shoulders"
+  "carrying giant baby elephant on shoulders"
   "clashing playfully with goofy, wobbly stumbles"
-  "swinging and swiping with animated, stretchy limbs"
 )
 ATMOSPHERES=(
   "under a golden sunset with warm, rosy hues"
