@@ -98,6 +98,8 @@ jobs:
           ACCESS_TOKEN=$(gcloud auth print-access-token)
           IMAGE_PROMPT="${{ steps.gemini.outputs.image_prompt }}"
           MUSIC_PROMPT="${{ steps.gemini.outputs.music_prompt }}"
+          echo "Image Prompt: $IMAGE_PROMPT"
+          echo "Music Prompt: $MUSIC_PROMPT"
 
           # Generate image
           echo "⏳ Generating image..."
