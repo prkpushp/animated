@@ -1,4 +1,4 @@
-name: Generate Music + Image with Vertex AI
+name: Generate Music + Image with Vertex AI and Gemini
 
 on:
   workflow_dispatch:
@@ -32,21 +32,76 @@ jobs:
           project_id: gothic-envelope-458808-h6
           install_components: "beta"
 
-      - name: Install tools
+      - name: Set up FFmpeg
+        uses: FedericoCarboni/setup-ffmpeg@v3
+
+      - name: Ensure jq and curl are installed
         run: |
           sudo apt-get update
-          sudo apt-get install -y jq curl ffmpeg
+          sudo apt-get install -y jq curl
 
-      - name: Generate image and music with Vertex AI
+      - name: Generate specialized prompts with Gemini
+        id: gemini
         run: |
           mkdir -p output
           PROMPT="${{ inputs.prompt }}"
-          TIMESTAMP=$(date +'%Y%m%d%H%M%S')
-
           ACCESS_TOKEN=$(gcloud auth print-access-token)
+          PROJECT_ID="gothic-envelope-458808-h6"
+          LOCATION="us-central1"
+          GEMINI_MODEL="gemini-1.5-flash-001"
 
+          # Compose Gemini request
+          cat >gemini_request.json <<EOF
+          {
+            "instances": [{
+              "messages": [{
+                "author": "user",
+                "content": "Input: ${PROMPT}\n\nCreate two creative prompts based on the above input, for:\n1. An image generation AI (describe visual scene, mood, details)\n2. A music generation AI (describe mood, instruments, style, tempo)\n\nFormat:\nImage Prompt: ...\nMusic Prompt: ..."
+              }]
+            }]
+          }
+          EOF
+
+          # Call Gemini API
+          curl -s -X POST \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${GEMINI_MODEL}:predict" \
+            -d @gemini_request.json \
+            -o gemini_response.json
+
+          # Parse Gemini response
+          GEN_CONTENT=$(jq -r '.predictions[0].candidates[0].content' gemini_response.json)
+          IMAGE_PROMPT=$(echo "$GEN_CONTENT" | grep -E '^Image Prompt:' | head -n1 | sed 's/^Image Prompt:[[:space:]]*//')
+          MUSIC_PROMPT=$(echo "$GEN_CONTENT" | grep -E '^Music Prompt:' | head -n1 | sed 's/^Music Prompt:[[:space:]]*//')
+
+          # Fallback if not parsed
+          if [ -z "$IMAGE_PROMPT" ]; then IMAGE_PROMPT="$PROMPT"; fi
+          if [ -z "$MUSIC_PROMPT" ]; then MUSIC_PROMPT="$PROMPT"; fi
+
+          echo "Image prompt: $IMAGE_PROMPT"
+          echo "Music prompt: $MUSIC_PROMPT"
+
+          # Set outputs for later steps
+          echo "image_prompt<<EOF" >> $GITHUB_OUTPUT
+          echo "$IMAGE_PROMPT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "music_prompt<<EOF" >> $GITHUB_OUTPUT
+          echo "$MUSIC_PROMPT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Generate image and music with Vertex AI
+        id: generate-media
+        run: |
+          mkdir -p output
+          TIMESTAMP=$(date +'%Y%m%d%H%M%S')
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+          IMAGE_PROMPT="${{ steps.gemini.outputs.image_prompt }}"
+          MUSIC_PROMPT="${{ steps.gemini.outputs.music_prompt }}"
+
+          # Generate image
           echo "⏳ Generating image..."
-          jq -n --arg prompt "$PROMPT" '{
+          jq -n --arg prompt "$IMAGE_PROMPT" '{
             instances: [{ prompt: $prompt }],
             parameters: {
               sampleCount: 1,
@@ -72,8 +127,9 @@ jobs:
             exit 1
           fi
 
+          # Generate music
           echo "⏳ Generating music..."
-          jq -n --arg prompt "$PROMPT" '{
+          jq -n --arg prompt "$MUSIC_PROMPT" '{
             instances: [{ prompt: $prompt }],
             parameters: {
               sampleCount: 1
@@ -99,8 +155,8 @@ jobs:
           fi
 
       - name: 🛠️ Run Bash video script
-        run: bash scripts/make_video.sh "${{ steps.duration.outputs.duration }}"
-        
+        run: bash scripts/make_video.sh
+
       - name: Upload media artifact
         uses: actions/upload-artifact@v4
         with:
