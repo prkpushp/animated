@@ -75,6 +75,11 @@ jobs:
           IMAGE_PROMPT=$(echo "$GEN_CONTENT" | grep -E '^Image Prompt:' | head -n1 | sed 's/^Image Prompt:[[:space:]]*//')
           MUSIC_PROMPT=$(echo "$GEN_CONTENT" | grep -E '^Music Prompt:' | head -n1 | sed 's/^Music Prompt:[[:space:]]*//')
 
+          echo "GEN_CONTENT: $GEN_CONTENT"
+          echo "IMAGE_PROMPT: $IMAGE_PROMPT"
+          echo "MUSIC_PROMPT: $MUSIC_PROMPT"
+
+          
           # Fallback if not parsed
           if [ -z "$IMAGE_PROMPT" ]; then IMAGE_PROMPT="$PROMPT"; fi
           if [ -z "$MUSIC_PROMPT" ]; then MUSIC_PROMPT="$PROMPT"; fi
