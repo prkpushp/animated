@@ -34,6 +34,10 @@ jobs:
 
       - name: Set up FFmpeg
         uses: FedericoCarboni/setup-ffmpeg@v3
+        with:
+          ffmpeg-version: 6.1.1
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
 
       - name: Ensure jq and curl are installed
         run: |
