@@ -34,9 +34,8 @@ jobs:
 
       - name: Ensure jq and curl are installed
         run: |
-          pip install ffmpeg
           sudo apt-get update
-          sudo apt-get install -y jq curl
+          sudo apt-get install -y jq curl ffmpeg
 
       - name: Generate specialized prompts and SEO data with Gemini
         id: gemini
