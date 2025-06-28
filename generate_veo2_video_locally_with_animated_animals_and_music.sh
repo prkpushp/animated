@@ -6,7 +6,7 @@ LOCATION_ID="us-central1"
 API_ENDPOINT="us-central1-aiplatform.googleapis.com"
 MODEL_ID="veo-2.0-generate-001"
 STORAGE_URI="gs://helloranjan1/output/"
-AUDIO_FILE="background_music.mp3"
+AUDIO_FILE=`ls *.mp3`
 LOCAL_DIR="./videos"
 
 # Create local directory if it doesn't exist
