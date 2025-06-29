@@ -106,11 +106,26 @@ jobs:
             -d @gemini_seo_request.json \
             -o gemini_seo_response.json
 
-          # Extract JSON from Gemini SEO response
-          SEO_JSON=$(jq -r '.predictions[0].candidates[0].content' gemini_seo_response.json | sed -n '/{/,/}/p')
-          echo "$SEO_JSON" | jq . > output/content.json
+          # Extract and parse the first JSON object from the response robustly
+          RAW_CONTENT=$(jq -r '.predictions[0].candidates[0].content' gemini_seo_response.json)
+
+          SEO_JSON=$(echo "$RAW_CONTENT" | python3 -c "
+          import sys, json, re
+          data = sys.stdin.read()
+          m = re.search(r'\{.*\}', data, re.DOTALL)
+          if m:
+              try:
+                  obj = json.loads(m.group(0))
+                  print(json.dumps(obj, indent=2))
+              except Exception as e:
+                  print('{}')
+          else:
+              print('{}')
+          ")
+          echo "$SEO_JSON" > output/content.json
           echo "Generated SEO content:"
           cat output/content.json
+          
 
       - name: Generate image and music with Vertex AI
         id: generate-media
