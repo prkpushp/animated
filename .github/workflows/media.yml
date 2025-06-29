@@ -46,7 +46,7 @@ jobs:
           ACCESS_TOKEN=$(gcloud auth print-access-token)
           PROJECT_ID="gothic-envelope-458808-h6"
           LOCATION="us-central1"
-          GEMINI_MODEL="gemini-1.5-flash-001"
+          GEMINI_MODEL="gemini-2.5-flash"
 
           # Compose Gemini request for prompts
           cat >gemini_prompt_request.json <<EOF
