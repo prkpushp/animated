@@ -32,7 +32,7 @@ jobs:
           project_id: gothic-envelope-458808-h6
           install_components: "beta"
 
-      - name: Ensure jq and curl are installed
+      - name: Ensure jq, curl, python3 are installed
         run: |
           sudo apt-get update
           sudo apt-get install -y jq curl ffmpeg python3
