@@ -40,6 +40,7 @@ jobs:
       - name: Generate specialized prompts and SEO data with Gemini
         id: gemini
         run: |
+          set -e
           mkdir -p output
           PROMPT="${{ inputs.prompt }}"
           ACCESS_TOKEN=$(gcloud auth print-access-token)
@@ -67,13 +68,23 @@ jobs:
             -d @gemini_prompt_request.json \
             -o gemini_prompts_response.json
 
-          GEN_PROMPTS_CONTENT=$(jq -r '.predictions[0].candidates[0].content' gemini_prompts_response.json)
-          IMAGE_PROMPT=$(echo "$GEN_PROMPTS_CONTENT" | grep -E '^Image Prompt:' | head -n1 | sed 's/^Image Prompt:[[:space:]]*//')
-          MUSIC_PROMPT=$(echo "$GEN_PROMPTS_CONTENT" | grep -E '^Music Prompt:' | head -n1 | sed 's/^Music Prompt:[[:space:]]*//')
+          echo "==== Gemini response (prompts) ===="
+          cat gemini_prompts_response.json
 
-          # Fallback if not parsed
-          if [ -z "$IMAGE_PROMPT" ]; then IMAGE_PROMPT="$PROMPT"; fi
-          if [ -z "$MUSIC_PROMPT" ]; then MUSIC_PROMPT="$PROMPT"; fi
+          # Defensive extraction in case of empty/missing content
+          HAS_PROMPT=$(jq '.predictions and .predictions[0] and .predictions[0].candidates and .predictions[0].candidates[0].content != null' gemini_prompts_response.json)
+          if [ "$HAS_PROMPT" != "true" ]; then
+            echo "Gemini did not return prompt content. Falling back to user input."
+            IMAGE_PROMPT="$PROMPT"
+            MUSIC_PROMPT="$PROMPT"
+          else
+            GEN_PROMPTS_CONTENT=$(jq -r '.predictions[0].candidates[0].content' gemini_prompts_response.json)
+            IMAGE_PROMPT=$(echo "$GEN_PROMPTS_CONTENT" | grep -E '^Image Prompt:' | head -n1 | sed 's/^Image Prompt:[[:space:]]*//')
+            MUSIC_PROMPT=$(echo "$GEN_PROMPTS_CONTENT" | grep -E '^Music Prompt:' | head -n1 | sed 's/^Music Prompt:[[:space:]]*//')
+            # Fallback if not parsed
+            if [ -z "$IMAGE_PROMPT" ]; then IMAGE_PROMPT="$PROMPT"; fi
+            if [ -z "$MUSIC_PROMPT" ]; then MUSIC_PROMPT="$PROMPT"; fi
+          fi
 
           echo "Image prompt: $IMAGE_PROMPT"
           echo "Music prompt: $MUSIC_PROMPT"
@@ -106,10 +117,21 @@ jobs:
             -d @gemini_seo_request.json \
             -o gemini_seo_response.json
 
-          # Robustly extract the JSON object from content (handles markdown, extra text)
+          echo "==== Gemini response (seo) ===="
+          cat gemini_seo_response.json
+
+          # Check for content
+          HAS_SEO=$(jq '.predictions and .predictions[0] and .predictions[0].candidates and .predictions[0].candidates[0].content != null' gemini_seo_response.json)
+          if [ "$HAS_SEO" != "true" ]; then
+            echo "Gemini did not return SEO content. output/content.json will be empty."
+            echo "{}" > output/content.json
+            exit 0
+          fi
+
           RAW_CONTENT=$(jq -r '.predictions[0].candidates[0].content' gemini_seo_response.json)
           echo "RAW_CONTENT:"
           echo "$RAW_CONTENT"
+          echo "$RAW_CONTENT" > output/raw_content.txt
 
           SEO_JSON=$(echo "$RAW_CONTENT" | python3 -c "
           import sys, json, re
@@ -118,7 +140,7 @@ jobs:
           
           # Remove markdown code fencing
           data = re.sub(r'```[a-zA-Z]*', '', data)
-          data = re.sub(r'```', '', data)
+          data = re.sub(r'```', '', data).strip()
           
           # Find the first JSON object, non-greedy
           m = re.search(r'(\{.*?\})', data, re.DOTALL)
@@ -207,5 +229,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: media-output-${{ github.run_id }}-${{ github.run_number }}
-          path: output/
+          path: |
+            output/
+            output/raw_content.txt
           retention-days: 7
