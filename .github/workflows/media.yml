@@ -138,20 +138,20 @@ jobs:
           echo "$RAW_CONTENT" > output/raw_content.txt
 
           SEO_JSON=$(echo "$RAW_CONTENT" | python3 -c "
-import sys, json, re
-data = sys.stdin.read()
-data = re.sub(r'```[a-zA-Z]*', '', data)
-data = re.sub(r'```', '', data).strip()
-m = re.search(r'(\{.*?\})', data, re.DOTALL)
-if m:
-    try:
-        obj = json.loads(m.group(1))
-        print(json.dumps(obj, indent=2))
-    except Exception as e:
-        print('{}')
-else:
-    print('{}')
-")
+          import sys, json, re
+          data = sys.stdin.read()
+          data = re.sub(r'```[a-zA-Z]*', '', data)
+          data = re.sub(r'```', '', data).strip()
+          m = re.search(r'(\{.*?\})', data, re.DOTALL)
+          if m:
+              try:
+                  obj = json.loads(m.group(1))
+                  print(json.dumps(obj, indent=2))
+              except Exception as e:
+                  print('{}')
+          else:
+              print('{}')
+          ")
           echo "$SEO_JSON" > output/content.json
           echo "Generated SEO content:"
           cat output/content.json
