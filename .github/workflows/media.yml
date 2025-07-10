@@ -29,7 +29,7 @@ jobs:
       - name: Set up Google Cloud CLI
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: gothic-envelope-458808-h6
+          project_id: abiding-window-465512-p7
           install_components: "beta"
 
       - name: Ensure jq, curl, python3 are installed
