@@ -7,7 +7,8 @@ on:
         description: 'Creative prompt (e.g., "An energetic, dreamy piano melody with a lo-fi beat and cityscape at dusk")'
         required: false
         type: string
-
+  schedule:
+    - cron: '30 0 * * *' # Runs every day at 6:00 AM IST (00:30 UTC)
 jobs:
   generate-media:
     runs-on: ubuntu-latest
