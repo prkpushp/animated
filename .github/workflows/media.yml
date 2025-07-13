@@ -9,6 +9,7 @@ on:
         type: string
   schedule:
     - cron: '30 0 * * *' # Runs every day at 6:00 AM IST (00:30 UTC)
+
 jobs:
   generate-media:
     runs-on: ubuntu-latest
@@ -27,10 +28,15 @@ jobs:
           credentials_json: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
           create_credentials_file: true
 
+      - name: Extract project_id from credentials
+        id: extract-project-id
+        run: |
+          echo "PROJECT_ID=$(jq -r .project_id <<< \"${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}\")" >> $GITHUB_ENV
+
       - name: Set up Google Cloud CLI
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: abiding-window-465512-p7
+          project_id: ${{ env.PROJECT_ID }}
           install_components: "beta"
 
       - name: Ensure jq, curl, python3 are installed
@@ -45,13 +51,11 @@ jobs:
           mkdir -p output
           PROMPT_INPUT="${{ inputs.prompt }}"
 
-          # If no user prompt provided, use default context
           if [ -z "$PROMPT_INPUT" ]; then
             PROMPT_INPUT="Create a YouTube concept for a music channel focused on sleep, relaxation, meditation, focus, and nature ambiance. Generate a unique video idea that fits this theme."
           fi
 
           ACCESS_TOKEN=$(gcloud auth print-access-token)
-          PROJECT_ID="abiding-window-465512-p7"
           LOCATION="us-central1"
           GEMINI_MODEL="gemini-2.0-flash-lite-001"
 
@@ -75,9 +79,6 @@ jobs:
             -d @gemini_prompt_request.json \
             -o gemini_prompts_response.json
 
-          echo "==== Gemini response (prompts) ===="
-          cat gemini_prompts_response.json
-
           HAS_PROMPT=$(jq '.candidates != null and .candidates[0].content.parts[0].text != null' gemini_prompts_response.json || echo "false")
           if [ "$HAS_PROMPT" != "true" ]; then
             GEN_PROMPTS_CONTENT=$(jq -r '.candidates[0].content.parts[0].text // .candidates[0].content.parts[0] // empty' gemini_prompts_response.json)
@@ -86,7 +87,6 @@ jobs:
           fi
 
           if [ -z "$GEN_PROMPTS_CONTENT" ]; then
-            echo "Gemini did not return prompt content. Falling back to user input."
             IMAGE_PROMPT="$PROMPT_INPUT"
             MUSIC_PROMPT="$PROMPT_INPUT"
           else
@@ -96,17 +96,12 @@ jobs:
             if [ -z "$MUSIC_PROMPT" ]; then MUSIC_PROMPT="$PROMPT_INPUT"; fi
           fi
 
-          echo "Image prompt: $IMAGE_PROMPT"
-          echo "Music prompt: $MUSIC_PROMPT"
-
           echo "image_prompt<<EOF" >> $GITHUB_OUTPUT
           echo "$IMAGE_PROMPT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
           echo "music_prompt<<EOF" >> $GITHUB_OUTPUT
           echo "$MUSIC_PROMPT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-
-          # --------- GENERATE SEO DATA ----------
 
           cat >gemini_seo_request.json <<EOF
           {
@@ -157,7 +152,6 @@ jobs:
           IMAGE_PROMPT="${{ steps.gemini.outputs.image_prompt }}"
           MUSIC_PROMPT="${{ steps.gemini.outputs.music_prompt }}"
 
-          # Generate image
           jq -n --arg prompt "$IMAGE_PROMPT" '{
             instances: [{ prompt: $prompt }],
             parameters: {
@@ -169,12 +163,11 @@ jobs:
           curl -s -X POST \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
-            "https://us-central1-aiplatform.googleapis.com/v1/projects/abiding-window-465512-p7/locations/us-central1/publishers/google/models/imagegeneration:predict" \
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/us-central1/publishers/google/models/imagegeneration:predict" \
             -d @request_image.json \
             -o response_image.json
 
           IMAGE_B64=$(jq -r '.predictions[0].bytesBase64Encoded' response_image.json)
-
           if [ "$IMAGE_B64" != "null" ] && [ -n "$IMAGE_B64" ]; then
             echo "$IMAGE_B64" | base64 -d > "output/image-$TIMESTAMP.png"
           else
@@ -182,7 +175,6 @@ jobs:
             exit 1
           fi
 
-          # Generate music
           jq -n --arg prompt "$MUSIC_PROMPT" '{
             instances: [{ prompt: $prompt }],
             parameters: {
@@ -193,12 +185,11 @@ jobs:
           curl -s -X POST \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
-            "https://us-central1-aiplatform.googleapis.com/v1/projects/abiding-window-465512-p7/locations/us-central1/publishers/google/models/lyria-002:predict" \
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/us-central1/publishers/google/models/lyria-002:predict" \
             -d @request_music.json \
             -o response_music.json
 
           AUDIO_B64=$(jq -r '.predictions[0].bytesBase64Encoded' response_music.json)
-
           if [ "$AUDIO_B64" != "null" ] && [ -n "$AUDIO_B64" ]; then
             echo "$AUDIO_B64" | base64 -d > "output/music-$TIMESTAMP.wav"
           else
