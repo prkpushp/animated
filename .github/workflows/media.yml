@@ -178,7 +178,7 @@ jobs:
           curl -s -X POST \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
-            "https://us-central1-aiplatform.googleapis.com/v1/projects/gothic-envelope-458808-h6/locations/us-central1/publishers/google/models/imagegeneration:predict" \
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/abiding-window-465512-p7/locations/us-central1/publishers/google/models/imagegeneration:predict" \
             -d @request_image.json \
             -o response_image.json
 
@@ -205,7 +205,7 @@ jobs:
           curl -s -X POST \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
-            "https://us-central1-aiplatform.googleapis.com/v1/projects/gothic-envelope-458808-h6/locations/us-central1/publishers/google/models/lyria-002:predict" \
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/abiding-window-465512-p7/locations/us-central1/publishers/google/models/lyria-002:predict" \
             -d @request_music.json \
             -o response_music.json
 
