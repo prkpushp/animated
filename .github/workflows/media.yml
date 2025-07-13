@@ -44,7 +44,7 @@ jobs:
           mkdir -p output
           PROMPT="${{ inputs.prompt }}"
           ACCESS_TOKEN=$(gcloud auth print-access-token)
-          PROJECT_ID="gothic-envelope-458808-h6"
+          PROJECT_ID="abiding-window-465512-p7"
           LOCATION="us-central1"
           GEMINI_MODEL="gemini-2.0-flash-lite-001" # or gemini-1.5-pro, gemini-2.5-flash if available for your project
 
