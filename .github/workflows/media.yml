@@ -28,10 +28,11 @@ jobs:
           credentials_json: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
           create_credentials_file: true
 
-      - name: Extract project_id from credentials
+      - name: Extract project_id from service account file
         id: extract-project-id
         run: |
-          echo "PROJECT_ID=$(jq -r .project_id <<< \"${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}\")" >> $GITHUB_ENV
+          export PROJECT_ID=$(jq -r .project_id < "${{ env.GOOGLE_APPLICATION_CREDENTIALS }}")
+          echo "PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
 
       - name: Set up Google Cloud CLI
         uses: google-github-actions/setup-gcloud@v2
