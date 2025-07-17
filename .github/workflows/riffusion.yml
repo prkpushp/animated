@@ -30,17 +30,25 @@ jobs:
       - name: Generate music
         run: |
           mkdir -p output
-          python - <<EOF
-          from riffusion import cli
-          import os
-          prompt = "${{ github.event.inputs.prompt }}"
-          print(f"Generating for prompt: {prompt}")
-          img_path = "output/spec.png"
-          audio_path = "output/music.wav"
-          cli.cli(["image", "--prompt", prompt, "--out", img_path])
-          cli.cli(["image-to-audio", "--image", img_path, "--audio", audio_path])
-          print(f"Saved to: {audio_path}")
-          EOF
+          PROMPT="${{ github.event.inputs.prompt }}"
+          echo "Generating for prompt: $PROMPT"
+      
+          python3 - <<EOF
+      import subprocess
+      import os
+      
+      prompt = os.getenv("PROMPT", "lofi beats with ocean waves")
+      img_path = "output/spec.png"
+      audio_path = "output/music.wav"
+      
+      # Generate spectrogram from prompt
+      subprocess.run(["riffusion", "image", "--prompt", prompt, "--out", img_path], check=True)
+      
+      # Convert to audio
+      subprocess.run(["riffusion", "image-to-audio", "--image", img_path, "--audio", audio_path], check=True)
+      print(f"Generated: {audio_path}")
+      EOF
+
 
       - name: Upload audio artifact
         uses: actions/upload-artifact@v4
