@@ -1,0 +1,62 @@
+name: Generate Music via MusicGen
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Text prompt for music generation'
+        required: true
+        default: 'epic orchestral battle theme'
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libsndfile1
+
+      - name: Install AudioCraft (MusicGen)
+        run: |
+          pip install torch==2.1.0
+          pip install audiocraft
+
+      - name: Generate music
+        run: |
+          mkdir -p output
+          python - <<EOF
+from audiocraft.models import MusicGen
+import torch
+import os
+import scipy.io.wavfile as wavfile
+
+prompt = os.getenv("INPUT_PROMPT")
+print("Prompt:", prompt)
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model = MusicGen.get_pretrained('musicgen-medium').to(device)
+model.set_generation_params(duration=30)
+wav = model.generate([prompt], device=device)[0]  # returns numpy array
+
+wav = (wav * 32767).astype('int16')  # convert to 16-bit PCM
+wavfile.write("output/music.wav", model.sample_rate, wav)
+print("Saved output/music.wav")
+EOF
+        env:
+          INPUT_PROMPT: ${{ github.event.inputs.prompt }}
+
+      - name: Upload generated music
+        uses: actions/upload-artifact@v4
+        with:
+          name: musicgen-output
+          path: output/music.wav
