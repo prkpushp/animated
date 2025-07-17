@@ -34,20 +34,20 @@ jobs:
           echo "Generating for prompt: $PROMPT"
       
           python3 - <<EOF
-      import subprocess
-      import os
-      
-      prompt = os.getenv("PROMPT", "lofi beats with ocean waves")
-      img_path = "output/spec.png"
-      audio_path = "output/music.wav"
-      
-      # Generate spectrogram from prompt
-      subprocess.run(["riffusion", "image", "--prompt", prompt, "--out", img_path], check=True)
-      
-      # Convert to audio
-      subprocess.run(["riffusion", "image-to-audio", "--image", img_path, "--audio", audio_path], check=True)
-      print(f"Generated: {audio_path}")
-      EOF
+          import subprocess
+          import os
+          
+          prompt = os.getenv("PROMPT", "lofi beats with ocean waves")
+          img_path = "output/spec.png"
+          audio_path = "output/music.wav"
+          
+          # Generate spectrogram from prompt
+          subprocess.run(["riffusion", "image", "--prompt", prompt, "--out", img_path], check=True)
+          
+          # Convert to audio
+          subprocess.run(["riffusion", "image-to-audio", "--image", img_path, "--audio", audio_path], check=True)
+          print(f"Generated: {audio_path}")
+          EOF
 
 
       - name: Upload audio artifact
