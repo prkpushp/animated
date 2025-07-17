@@ -35,24 +35,24 @@ jobs:
         run: |
           mkdir -p output
           python - <<EOF
-from audiocraft.models import MusicGen
-import torch
-import os
-import scipy.io.wavfile as wavfile
-
-prompt = os.getenv("INPUT_PROMPT")
-print("Prompt:", prompt)
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model = MusicGen.get_pretrained('musicgen-medium').to(device)
-model.set_generation_params(duration=30)
-wav = model.generate([prompt], device=device)[0]  # returns numpy array
-
-wav = (wav * 32767).astype('int16')  # convert to 16-bit PCM
-wavfile.write("output/music.wav", model.sample_rate, wav)
-print("Saved output/music.wav")
-EOF
-        env:
+          from audiocraft.models import MusicGen
+          import torch
+          import os
+          import scipy.io.wavfile as wavfile
+          
+          prompt = os.getenv("INPUT_PROMPT")
+          print("Prompt:", prompt)
+          
+          device = "cuda" if torch.cuda.is_available() else "cpu"
+          model = MusicGen.get_pretrained('musicgen-medium').to(device)
+          model.set_generation_params(duration=30)
+          wav = model.generate([prompt], device=device)[0]  # returns numpy array
+          
+          wav = (wav * 32767).astype('int16')  # convert to 16-bit PCM
+          wavfile.write("output/music.wav", model.sample_rate, wav)
+          print("Saved output/music.wav")
+          EOF
+                  env:
           INPUT_PROMPT: ${{ github.event.inputs.prompt }}
 
       - name: Upload generated music
