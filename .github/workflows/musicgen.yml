@@ -1,19 +1,19 @@
-name: Generate Music via MusicGen
+name: Generate Music with MusicGen (AudioCraft)
 
 on:
   workflow_dispatch:
     inputs:
       prompt:
-        description: 'Text prompt for music generation'
+        description: 'Describe the music you want (e.g., chill lofi with rain)'
         required: true
-        default: 'epic orchestral battle theme'
+        default: 'chill lofi with rain'
 
 jobs:
   generate:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v3
 
       - name: Set up Python 3.10
@@ -26,34 +26,43 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg libsndfile1
 
-      - name: Install AudioCraft (MusicGen)
+      - name: Install Python packages (torch, numpy, audiocraft)
         run: |
           pip install torch==2.1.0
+          pip install numpy<2.0
           pip install audiocraft
 
-      - name: Generate music
+      - name: Generate music from prompt
         run: |
           mkdir -p output
           python - <<EOF
-          from audiocraft.models import MusicGen
-          import torch
           import os
+          import torch
           import scipy.io.wavfile as wavfile
+          from audiocraft.models import MusicGen
+          from huggingface_hub import login
           
           prompt = os.getenv("INPUT_PROMPT")
-          print("Prompt:", prompt)
+          hf_token = os.getenv("HF_TOKEN")
           
+          print("🎵 Generating music for prompt:", prompt)
+          
+          # Authenticate with Hugging Face
+          login(token=hf_token)
+          
+          # Load model and generate music
           device = "cuda" if torch.cuda.is_available() else "cpu"
-          model = MusicGen.get_pretrained('musicgen-medium').to(device)
+          model = MusicGen.get_pretrained("facebook/musicgen-medium").to(device)
           model.set_generation_params(duration=30)
-          wav = model.generate([prompt], device=device)[0]  # returns numpy array
           
-          wav = (wav * 32767).astype('int16')  # convert to 16-bit PCM
-          wavfile.write("output/music.wav", model.sample_rate, wav)
-          print("Saved output/music.wav")
+          waveform = model.generate([prompt], device=device)[0]
+          waveform = (waveform * 32767).astype("int16")  # Convert float32 to PCM16
+          wavfile.write("output/music.wav", model.sample_rate, waveform)
+          print("✅ Saved: output/music.wav")
           EOF
-                  env:
+        env:
           INPUT_PROMPT: ${{ github.event.inputs.prompt }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
 
       - name: Upload generated music
         uses: actions/upload-artifact@v4
