@@ -2,6 +2,11 @@ name: Generate Music via Riffusion
 
 on:
   workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Music prompt'
+        required: true
+        default: 'jazz piano improvisation'
 
 jobs:
   generate:
@@ -11,29 +16,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
       - name: Install dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg libsndfile1
-          python -m pip install --upgrade pip
+          pip install --upgrade pip
           pip install riffusion
 
-      - name: Generate spectrogram
-        env:
-          PROMPT: "jazz piano improvisation"
+      - name: Generate music
         run: |
           mkdir -p output
           python - <<EOF
           from riffusion import cli
           import os
-          prompt = os.getenv("PROMPT")
+          prompt = "${{ github.event.inputs.prompt }}"
+          print(f"Generating for prompt: {prompt}")
           img_path = "output/spec.png"
+          audio_path = "output/music.wav"
           cli.cli(["image", "--prompt", prompt, "--out", img_path])
-          audio_path = "output/clip.wav"
           cli.cli(["image-to-audio", "--image", img_path, "--audio", audio_path])
+          print(f"Saved to: {audio_path}")
           EOF
 
       - name: Upload audio artifact
         uses: actions/upload-artifact@v4
         with:
           name: riffusion-audio
-          path: output/*.wav
+          path: output/music.wav
