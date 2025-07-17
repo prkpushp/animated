@@ -6,8 +6,6 @@ on:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/pytorch/pytorch:2.0.1-cuda11.7-runtime  # GPU-enabled container
 
     steps:
       - name: Checkout
@@ -15,7 +13,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt-get update && apt-get install -y ffmpeg libsndfile1
+          sudo apt-get update && sudo apt-get install -y ffmpeg libsndfile1
           python -m pip install --upgrade pip
           pip install riffusion
 
@@ -28,13 +26,10 @@ jobs:
           from riffusion import cli
           import os
           prompt = os.getenv("PROMPT")
-          # Generate spectrogram image and save to a temp file
           img_path = "output/spec.png"
           cli.cli(["image", "--prompt", prompt, "--out", img_path])
-          # Convert spectrogram image to audio
           audio_path = "output/clip.wav"
           cli.cli(["image-to-audio", "--image", img_path, "--audio", audio_path])
-          print("Generated:", audio_path)
           EOF
 
       - name: Upload audio artifact
