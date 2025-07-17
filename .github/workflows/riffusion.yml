@@ -1,0 +1,46 @@
+name: Generate Music via Riffusion
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 1'  # weekly every Monday
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/pytorch/pytorch:2.0.1-cuda11.7-runtime  # GPU-enabled container
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          apt-get update && apt-get install -y ffmpeg libsndfile1
+          python -m pip install --upgrade pip
+          pip install riffusion
+
+      - name: Generate spectrogram
+        env:
+          PROMPT: "jazz piano improvisation"
+        run: |
+          mkdir -p output
+          python - <<EOF
+          from riffusion import cli
+          import os
+          prompt = os.getenv("PROMPT")
+          # Generate spectrogram image and save to a temp file
+          img_path = "output/spec.png"
+          cli.cli(["image", "--prompt", prompt, "--out", img_path])
+          # Convert spectrogram image to audio
+          audio_path = "output/clip.wav"
+          cli.cli(["image-to-audio", "--image", img_path, "--audio", audio_path])
+          print("Generated:", audio_path)
+          EOF
+
+      - name: Upload audio artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: riffusion-audio
+          path: output/*.wav
