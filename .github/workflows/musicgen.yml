@@ -35,7 +35,7 @@ jobs:
           pip install torch==2.1.0
           ls -l /home/runner/work/_temp/*.sh
           cat /home/runner/work/_temp/*.sh
-          pip install numpy<2.0
+          pip install "numpy<2.0"
           ls -l /home/runner/work/_temp/*.sh
           cat /home/runner/work/_temp/*.sh
           pip install audiocraft
