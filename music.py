@@ -14,7 +14,7 @@ login(token=hf_token)
 
 # Load model and generate music
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = MusicGen.get_pretrained("facebook/musicgen-medium").to(device)
+model = MusicGen.get_pretrained("facebook/musicgen-medium")
 model.set_generation_params(duration=30)
 
 waveform = model.generate([prompt], device=device)[0]
