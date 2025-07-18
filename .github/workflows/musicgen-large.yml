@@ -6,7 +6,7 @@ on:
       prompt:
         description: 'Describe the music you want (e.g., "ambient synth with soft rain")'
         required: true
-        default: 'chill lofi with rain'
+        default: 'Slow ambient melodies with soft piano, healing pads, and deep emotional undertones to comfort grief and support emotional release.'
 
 jobs:
   generate:
