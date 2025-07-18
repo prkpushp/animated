@@ -12,12 +12,12 @@ print("🎵 Generating music for prompt:", prompt)
 # Authenticate with Hugging Face
 login(token=hf_token)
 
-# Load model and generate music
-device = "cuda" if torch.cuda.is_available() else "cpu"
+# Load model
 model = MusicGen.get_pretrained("facebook/musicgen-medium")
 model.set_generation_params(duration=30)
 
-waveform = model.generate([prompt], device=device)[0]
-waveform = (waveform * 32767).astype("int16")  # Convert float32 to PCM16
+# Generate music
+waveform = model.generate([prompt])[0]
+waveform = (waveform * 32767).astype("int16")
 wavfile.write("output/music.wav", model.sample_rate, waveform)
 print("✅ Saved: output/music.wav")
