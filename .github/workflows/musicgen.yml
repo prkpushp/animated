@@ -24,15 +24,20 @@ jobs:
       - name: Install system dependencies
         run: |
           ls -l /home/runner/work/_temp/*.sh
-          cat /home/runner/work/_temp/*.sh
-          sleep 10
+          cat /home/runner/work/_temp/*.sh        
           sudo apt-get update
           sudo apt-get install -y ffmpeg libsndfile1
 
       - name: Install Python packages
         run: |
+          ls -l /home/runner/work/_temp/*.sh
+          cat /home/runner/work/_temp/*.sh
           pip install torch==2.1.0
+          ls -l /home/runner/work/_temp/*.sh
+          cat /home/runner/work/_temp/*.sh
           pip install numpy<2.0
+          ls -l /home/runner/work/_temp/*.sh
+          cat /home/runner/work/_temp/*.sh
           pip install audiocraft
 
       - name: Generate music from prompt
