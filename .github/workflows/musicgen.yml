@@ -40,13 +40,25 @@ jobs:
           cat /home/runner/work/_temp/*.sh
           pip install audiocraft
 
+      - name: Debug token visibility
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "::error title=Missing Token::HF_TOKEN is not set!"
+            exit 1
+          else
+            echo "::notice title=Token OK::HF_TOKEN length = ${#HF_TOKEN}"
+          fi
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          
       - name: Generate music from prompt
+        env:
+          INPUT_PROMPT: ${{ github.event.inputs.prompt }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}      
         run: |
           mkdir -p output
           python music.py
-        env:
-          INPUT_PROMPT: ${{ github.event.inputs.prompt }}
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+
 
       - name: Upload generated music
         uses: actions/upload-artifact@v4
