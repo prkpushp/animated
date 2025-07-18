@@ -33,6 +33,7 @@ jobs:
           pip install torch==2.1.0
           pip install audiocraft
           pip install "numpy<2.0" --force-reinstall
+          pip install soundfile
 
       - name: Debug token visibility
         run: |
