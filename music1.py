@@ -2,6 +2,7 @@ import os
 import torch
 import numpy as np
 import scipy.io.wavfile as wavfile
+import subprocess
 from audiocraft.models import MusicGen
 from huggingface_hub import login
 
@@ -20,20 +21,26 @@ model.set_generation_params(duration=30)
 # Generate waveform
 waveform = model.generate([prompt])[0]
 
-# Convert tensor to numpy and ensure shape (samples, ) or (samples, 1)
+# Convert to NumPy and fix shape
 waveform = waveform.detach().cpu().numpy()
-
-# Ensure waveform is mono (1D)
 if waveform.ndim > 1:
-    waveform = waveform[0]  # take first channel
-
-# Normalize and cast to int16
+    waveform = waveform[0]  # mono
 waveform = np.clip(waveform * 32767, -32768, 32767).astype(np.int16)
 
-# Fix sample rate and output path
+# Write .wav file
 sample_rate = int(model.sample_rate)
-output_path = "output/music.wav"
+wav_path = "output/music.wav"
+mp3_path = "output/music.mp3"
 
-# Final write
-wavfile.write(output_path, sample_rate, waveform)
-print(f"✅ Saved to: {output_path}")
+wavfile.write(wav_path, sample_rate, waveform)
+print(f"✅ WAV file saved: {wav_path}")
+
+# Convert to MP3 using ffmpeg
+try:
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", wav_path, "-codec:a", "libmp3lame", "-b:a", "192k", mp3_path],
+        check=True
+    )
+    print(f"🎧 MP3 file saved: {mp3_path}")
+except subprocess.CalledProcessError as e:
+    print("❌ MP3 conversion failed:", e)
