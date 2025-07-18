@@ -56,7 +56,11 @@ jobs:
 
 
       - name: Upload generated music
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: musicgen-output
-          path: output/music.wav
+          path: |
+            output/music.wav
+            output/music.mp3
+
