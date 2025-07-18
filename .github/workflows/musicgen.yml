@@ -52,7 +52,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}      
         run: |
           mkdir -p output
-          python music.py
+          python music1.py
 
 
       - name: Upload generated music
