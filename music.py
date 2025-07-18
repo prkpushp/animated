@@ -1,38 +1,35 @@
 import os
 import torch
 import numpy as np
-import scipy.io.wavfile as wavfile
+import soundfile as sf
 from audiocraft.models import MusicGen
 from huggingface_hub import login
 
-# Read input prompt and Hugging Face token from environment
-prompt = os.getenv("INPUT_PROMPT", "ambient meditation music")
+prompt = os.getenv("INPUT_PROMPT", "ambient meditation")
 hf_token = os.getenv("HF_TOKEN", "")
 
 print(f"🎵 Generating music for prompt: {prompt}")
 
-# Authenticate with Hugging Face
+# Login
 login(token=hf_token)
 
-# Load the MusicGen model
+# Load model
 model = MusicGen.get_pretrained("facebook/musicgen-medium")
-model.set_generation_params(duration=30)  # duration in seconds
+model.set_generation_params(duration=30)
 
 # Generate music
 waveform = model.generate([prompt])[0]
 
-# Convert waveform to 16-bit PCM NumPy array
+# Convert to NumPy int16
 waveform = (waveform * 32767).cpu().numpy().astype("int16")
 
-# Ensure waveform has correct shape
+# Normalize shape
 if waveform.ndim > 2:
     waveform = waveform.squeeze()
+if waveform.ndim == 2 and waveform.shape[0] == 1:
+    waveform = waveform[0]
 
-# Get sample rate as integer
-sample_rate = int(model.sample_rate)
-
-# Write to .wav file
+# Save as WAV using soundfile
 output_path = "output/music.wav"
-wavfile.write(output_path, sample_rate, waveform)
-
-print(f"✅ Music saved to {output_path}")
+sf.write(output_path, waveform, int(model.sample_rate), subtype="PCM_16")
+print(f"✅ Saved to {output_path}")
