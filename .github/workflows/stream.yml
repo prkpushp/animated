@@ -1,8 +1,8 @@
-name: Stream Latest Video to YouTube Live
+name: Streaming
 
 on:
   schedule:
-    - cron: '0 * * * 1'  # Runs every hour
+    - cron: '30 3 * * *'  # Runs every 9:00 AM IST
   workflow_dispatch:     # Also allow manual trigger
 
 permissions:
