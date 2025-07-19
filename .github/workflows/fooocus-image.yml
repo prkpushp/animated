@@ -1,0 +1,34 @@
+name: Generate AI Image with Fooocus
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Enter your image prompt'
+        required: true
+        default: 'A futuristic desert landscape with glowing pyramids'
+
+jobs:
+  update-prompt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Update prompt
+        run: |
+          echo "${{ github.event.inputs.prompt }}" > prompt.txt
+          cat prompt.txt
+
+      - name: Upload prompt to repo
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add prompt.txt
+          git commit -m "Updated prompt"
+          git push
+
+      - name: Display next step
+        run: |
+          echo "::notice ::Now open the Colab notebook and run all cells:"
+          echo "::notice ::https://colab.research.google.com/drive/1XPlqTVK5lQ_wTMCF9ulGRKn7M2Xn4OMx"
