@@ -8,7 +8,7 @@ on:
         required: false
         type: string
   schedule:
-    - cron: '30 0 * * *' # Runs every day at 6:00 AM IST (00:30 UTC)
+    - cron: '30 21 * * *' # Runs every day at 3:00 AM IST (00:30 UTC)
 
 jobs:
   generate-media:
@@ -226,7 +226,7 @@ jobs:
           fi
 
       - name: 🛠️ Run Bash video script
-        run: bash scripts/make_video.sh 150
+        run: bash scripts/make_video.sh 14400
 
       - name: Upload media artifact
         uses: actions/upload-artifact@v4
