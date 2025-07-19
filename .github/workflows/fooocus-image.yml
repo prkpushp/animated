@@ -4,31 +4,32 @@ on:
   workflow_dispatch:
     inputs:
       prompt:
-        description: 'Enter your image prompt'
-        required: true
-        default: 'A futuristic desert landscape with glowing pyramids'
+        description: 'Image prompt (optional override)'
+        required: false
 
 jobs:
-  update-prompt:
+  run-colab:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      - name: Update prompt
+      - name: (Re)sync prompt.txt if overridden
+        if: ${{ github.event.inputs.prompt }}
         run: |
           echo "${{ github.event.inputs.prompt }}" > prompt.txt
-          cat prompt.txt
-
-      - name: Upload prompt to repo
-        run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add prompt.txt
-          git commit -m "Updated prompt"
-          git push
+          git commit -m "Update prompt via workflow" || echo "No changes"
+          git push || echo "Push rejected"
 
-      - name: Display next step
-        run: |
-          echo "::notice ::Now open the Colab notebook and run all cells:"
-          echo "::notice ::https://colab.research.google.com/drive/1XPlqTVK5lQ_wTMCF9ulGRKn7M2Xn4OMx"
+      - name: Run Colab via colab-ssh
+        uses: addnab/colab-ssh@v2
+        with:
+          colab_url: ${{ secrets.COLAB_LINK }}
+          auth_token: ${{ secrets.COLAB_SSH_TOKEN }}
+
+      - name: Retrieve generated artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: fooocus_output
