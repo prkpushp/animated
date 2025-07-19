@@ -1,0 +1,106 @@
+name: Stream Latest Video to YouTube Live
+
+on:
+  schedule:
+    - cron: '0 * * * 1'  # Runs every hour
+  workflow_dispatch:     # Also allow manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  stream-live:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      YOUTUBE_STREAM_KEY: ${{ secrets.YOUTUBE_STREAM_KEY }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Get latest successful run of "4 hour video"
+        id: get_run
+        run: |
+          WORKFLOW_NAME="4 hour video"
+          BRANCH_NAME="main"
+          RESPONSE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs?status=success&per_page=50")
+
+          RUN_ID=$(echo "$RESPONSE" | jq -r \
+            --arg name "$WORKFLOW_NAME" \
+            --arg branch "$BRANCH_NAME" \
+            '.workflow_runs[] | select(.name == $name and .head_branch == $branch) | .id' | head -n 1)
+
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+
+      - name: Get artifact info from run
+        id: get_artifact
+        run: |
+          RUN_ID=${{ steps.get_run.outputs.run_id }}
+          ARTIFACTS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts")
+
+          ARTIFACT_NAME=$(echo "$ARTIFACTS" | jq -r '.artifacts[0].name')
+          ARTIFACT_URL=$(echo "$ARTIFACTS" | jq -r '.artifacts[0].archive_download_url')
+
+          echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+          echo "artifact_url=$ARTIFACT_URL" >> $GITHUB_OUTPUT
+
+      - name: Check if already streamed
+        id: check_live_log
+        run: |
+          LOG_FILE=live_check.txt
+          ARTIFACT_NAME=${{ steps.get_artifact.outputs.artifact_name }}
+
+          if [ -f "$LOG_FILE" ]; then
+            if grep -Fxq "$ARTIFACT_NAME" "$LOG_FILE"; then
+              echo "Already streamed."
+              echo "skip=true" >> $GITHUB_OUTPUT
+            else
+              echo "skip=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "Log file not found. Creating."
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Exit if already streamed
+        if: steps.check_live_log.outputs.skip == 'true'
+        run: echo "✅ Skipping stream — already streamed."
+
+      - name: Download artifact and extract video
+        if: steps.check_live_log.outputs.skip == 'false'
+        run: |
+          mkdir -p downloaded
+          curl -L -H "Authorization: token $GITHUB_TOKEN" \
+            -o artifact.zip "${{ steps.get_artifact.outputs.artifact_url }}"
+          unzip artifact.zip -d downloaded
+
+          VIDEO_FILE=$(find downloaded -type f -name '*.mp4' | head -n 1)
+          echo "video_file=$VIDEO_FILE" >> $GITHUB_ENV
+
+      - name: Install FFmpeg
+        if: steps.check_live_log.outputs.skip == 'false'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Stream to YouTube Live
+        if: steps.check_live_log.outputs.skip == 'false'
+        run: |
+          echo "🔴 Streaming $video_file to YouTube Live..."
+          ffmpeg -re -i "$video_file" \
+            -c:v libx264 -preset veryfast -maxrate 3000k -bufsize 6000k \
+            -pix_fmt yuv420p -g 50 -c:a aac -b:a 160k -ar 44100 \
+            -f flv "rtmp://a.rtmp.youtube.com/live2/$YOUTUBE_STREAM_KEY"
+
+      - name: Mark artifact as streamed
+        if: steps.check_live_log.outputs.skip == 'false'
+        run: |
+          ARTIFACT_NAME=${{ steps.get_artifact.outputs.artifact_name }}
+          echo "$ARTIFACT_NAME" >> live_check.txt
+
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add live_check.txt
+          git commit -m "✅ Marked $ARTIFACT_NAME as streamed"
+          git push
