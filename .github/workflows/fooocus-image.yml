@@ -3,6 +3,9 @@ name: Foocus Collab
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   generate-notebook:
     runs-on: ubuntu-latest
