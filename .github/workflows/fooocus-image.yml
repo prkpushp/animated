@@ -1,4 +1,4 @@
-name: Run Google Colab Notebook
+name: Run Google Colab & Capture Gradio URL
 
 on:
   workflow_dispatch:
@@ -14,12 +14,14 @@ jobs:
           wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
           sudo apt install -y ./google-chrome-stable_current_amd64.deb
 
-      - name: Set up Python environment
+      - name: Set up Python and dependencies
         run: |
           python3 -m pip install --upgrade pip
           pip install selenium webdriver-manager
 
-      - name: Create Python script to trigger Colab
+      - name: Create Python script to run Colab
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           cat > run_colab.py << 'EOF'
           from selenium import webdriver
@@ -38,10 +40,11 @@ jobs:
           service = Service(ChromeDriverManager().install())
           driver = webdriver.Chrome(service=service, options=options)
 
-          print("Opening Colab notebook...")
+          print("Opening Colab...")
           driver.get("https://colab.research.google.com/github/prkpushp/animated/blob/main/Fooocus_Colab.ipynb")
           time.sleep(15)
 
+          # Try 'Run anyway'
           try:
               run_anyway = driver.find_element(By.XPATH, "//paper-button[contains(., 'Run anyway')]")
               run_anyway.click()
@@ -50,6 +53,7 @@ jobs:
           except:
               print("No 'Run anyway' prompt.")
 
+          # Click Runtime > Run all
           try:
               driver.find_element(By.ID, "runtime-menu-button").click()
               time.sleep(2)
@@ -58,11 +62,10 @@ jobs:
           except Exception as e:
               print("Error clicking Run all:", e)
 
-          print("Waiting for 5 minutes while notebook runs...")
+          print("Waiting 5 minutes for notebook to finish...")
           time.sleep(300)
           driver.quit()
-          print("Finished execution.")
+          print("Done.")
           EOF
 
-      - name: Run the Colab notebook via Selenium
-        run: python3 run_colab.py
+          python3 run_colab.py
