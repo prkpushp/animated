@@ -1,4 +1,4 @@
-name: Generate Music with MusicGen (AudioCraft)
+name: NOT WORKING (AudioCraft)
 
 on:
   workflow_dispatch:
