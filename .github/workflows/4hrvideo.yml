@@ -1,4 +1,4 @@
-name: 4 hour video
+name: 3 hour video
 
 on:
   workflow_dispatch:
@@ -226,7 +226,7 @@ jobs:
           fi
 
       - name: 🛠️ Run Bash video script
-        run: bash scripts/make_video.sh
+        run: bash scripts/make_video.sh 10800
 
       - name: Upload media artifact
         uses: actions/upload-artifact@v4
