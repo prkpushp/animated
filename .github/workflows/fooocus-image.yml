@@ -1,12 +1,11 @@
 name: Run Fooocus Colab and Push Gradio URL
 
 on:
-  workflow_dispatch:  # Trigger manually
+  workflow_dispatch:
 
 jobs:
   run-colab:
     runs-on: ubuntu-latest
-
     env:
       GH_PAT: ${{ secrets.GH_PAT }}
 
@@ -17,12 +16,12 @@ jobs:
           wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
           sudo apt install -y ./google-chrome-stable_current_amd64.deb
 
-      - name: Set up Python environment
+      - name: Set up Python
         run: |
           python3 -m pip install --upgrade pip
           pip install selenium webdriver-manager
 
-      - name: Create Python script to open Colab
+      - name: Run Colab Notebook via Headless Browser
         run: |
           cat > run_colab.py << 'EOF'
           from selenium import webdriver
@@ -33,43 +32,29 @@ jobs:
           import time
 
           options = Options()
-          options.add_argument("--headless")
+          options.add_argument("--headless=new")
           options.add_argument("--no-sandbox")
           options.add_argument("--disable-dev-shm-usage")
-          options.add_argument("--disable-gpu")
+          options.add_argument("--window-size=1920,1080")
 
           service = Service(ChromeDriverManager().install())
           driver = webdriver.Chrome(service=service, options=options)
 
-          print("Opening notebook...")
+          print("Opening Colab...")
           driver.get("https://colab.research.google.com/github/prkpushp/animated/blob/main/Fooocus_Colab.ipynb")
           time.sleep(15)
 
-          # Handle 'Run anyway' if shown
-          try:
-              run_anyway = driver.find_element(By.XPATH, "//paper-button[contains(., 'Run anyway')]")
-              run_anyway.click()
-              print("Clicked 'Run anyway'")
-              time.sleep(5)
-          except:
-              print("No 'Run anyway' button.")
-
-          # Click Runtime > Run all
           try:
               driver.find_element(By.ID, "runtime-menu-button").click()
               time.sleep(2)
               driver.find_element(By.XPATH, "//div[contains(text(),'Run all')]").click()
               print("Clicked 'Run all'")
           except Exception as e:
-              print("Error clicking Run all:", e)
+              print("Failed to click Run all:", e)
 
-          # Wait for notebook to finish
-          print("Waiting 6 minutes for notebook to execute...")
-          time.sleep(360)
-
+          time.sleep(420)  # Wait ~7 minutes
           driver.quit()
           print("Done.")
           EOF
 
-      - name: Run Colab notebook via Selenium
-        run: python3 run_colab.py
+          python3 run_colab.py
