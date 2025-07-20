@@ -52,9 +52,11 @@ jobs:
           except Exception as e:
               print("Failed to click Run all:", e)
 
-          time.sleep(420)  # Wait ~7 minutes
+          print("Waiting ~7 minutes for Colab execution...")
+          time.sleep(420)
+
           driver.quit()
-          print("Done.")
+          print("✅ Finished automation.")
           EOF
 
           python3 run_colab.py
