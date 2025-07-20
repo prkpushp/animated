@@ -1,4 +1,4 @@
-name: 3 hour video
+name: 4 hour video
 
 on:
   workflow_dispatch:
