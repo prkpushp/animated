@@ -1,4 +1,4 @@
-name: Run Google Colab Notebook
+name: Run Google Colab Notebook Headlessly
 
 on:
   workflow_dispatch:
@@ -8,24 +8,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Set up Python & Dependencies
+      - name: Install Chrome
         run: |
-          sudo apt-get update
-          sudo apt-get install -y chromium-browser chromium-chromedriver
-          python3 -m pip install selenium webdriver-manager
+          wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt install -y ./google-chrome-stable_current_amd64.deb
 
-      - name: Run Colab Notebook via Selenium
-        env:
-          GMAIL_USERNAME: ${{ secrets.GMAIL_USERNAME }}
-          GMAIL_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+      - name: Install Python Dependencies
         run: |
-          cat > run_colab.py << EOF
+          python3 -m pip install --upgrade pip
+          pip install selenium webdriver-manager
+
+      - name: Create Python Script to Open and Run Notebook
+        run: |
+          cat > run_colab.py << 'EOF'
           from selenium import webdriver
           from selenium.webdriver.chrome.options import Options
           from selenium.webdriver.common.by import By
+          from webdriver_manager.chrome import ChromeDriverManager
           import time
 
           options = Options()
@@ -33,30 +32,31 @@ jobs:
           options.add_argument("--no-sandbox")
           options.add_argument("--disable-dev-shm-usage")
 
-          driver = webdriver.Chrome(options=options)
+          driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
+
           driver.get("https://colab.research.google.com/github/prkpushp/animated/blob/main/Fooocus_Colab.ipynb")
+          time.sleep(15)
 
-          time.sleep(10)
-
-          # Click "Run Anyway" if needed
+          # Try to click 'Run anyway' if it appears
           try:
               run_anyway = driver.find_element(By.XPATH, "//paper-button[contains(., 'Run anyway')]")
               run_anyway.click()
               time.sleep(5)
           except:
-              pass
+              print("Run anyway button not found, skipping.")
 
-          # Click Runtime > Run all
+          # Click on Runtime > Run All
           try:
               driver.find_element(By.ID, "runtime-menu-button").click()
-              time.sleep(1)
+              time.sleep(2)
               driver.find_element(By.XPATH, "//div[contains(text(),'Run all')]").click()
               print("Clicked Run All")
           except Exception as e:
               print("Error clicking Run all:", e)
 
-          time.sleep(300)  # wait for 5 minutes for notebook to finish
+          time.sleep(300)  # Let the notebook run for 5 minutes
           driver.quit()
           EOF
 
-          python3 run_colab.py
+      - name: Run Colab via Selenium
+        run: python3 run_colab.py
