@@ -1,11 +1,14 @@
-name: Run Google Colab & Capture Gradio URL
+name: Run Fooocus Colab and Push Gradio URL
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # Trigger manually
 
 jobs:
   run-colab:
     runs-on: ubuntu-latest
+
+    env:
+      GH_PAT: ${{ secrets.GH_PAT }}
 
     steps:
       - name: Install Google Chrome
@@ -14,14 +17,12 @@ jobs:
           wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
           sudo apt install -y ./google-chrome-stable_current_amd64.deb
 
-      - name: Set up Python and dependencies
+      - name: Set up Python environment
         run: |
           python3 -m pip install --upgrade pip
           pip install selenium webdriver-manager
 
-      - name: Create Python script to run Colab
-        env:
-          GH_PAT: ${{ secrets.GH_PAT }}
+      - name: Create Python script to open Colab
         run: |
           cat > run_colab.py << 'EOF'
           from selenium import webdriver
@@ -40,18 +41,18 @@ jobs:
           service = Service(ChromeDriverManager().install())
           driver = webdriver.Chrome(service=service, options=options)
 
-          print("Opening Colab...")
+          print("Opening notebook...")
           driver.get("https://colab.research.google.com/github/prkpushp/animated/blob/main/Fooocus_Colab.ipynb")
           time.sleep(15)
 
-          # Try 'Run anyway'
+          # Handle 'Run anyway' if shown
           try:
               run_anyway = driver.find_element(By.XPATH, "//paper-button[contains(., 'Run anyway')]")
               run_anyway.click()
-              time.sleep(5)
               print("Clicked 'Run anyway'")
+              time.sleep(5)
           except:
-              print("No 'Run anyway' prompt.")
+              print("No 'Run anyway' button.")
 
           # Click Runtime > Run all
           try:
@@ -62,10 +63,13 @@ jobs:
           except Exception as e:
               print("Error clicking Run all:", e)
 
-          print("Waiting 5 minutes for notebook to finish...")
-          time.sleep(300)
+          # Wait for notebook to finish
+          print("Waiting 6 minutes for notebook to execute...")
+          time.sleep(360)
+
           driver.quit()
           print("Done.")
           EOF
 
-          python3 run_colab.py
+      - name: Run Colab notebook via Selenium
+        run: python3 run_colab.py
