@@ -1,4 +1,4 @@
-name: Generate Music + Image with Vertex AI and Gemini
+name: Generate chill
 
 on:
   workflow_dispatch:
