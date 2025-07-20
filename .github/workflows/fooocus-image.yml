@@ -24,6 +24,7 @@ jobs:
           cat > run_colab.py << 'EOF'
           from selenium import webdriver
           from selenium.webdriver.chrome.options import Options
+          from selenium.webdriver.chrome.service import Service
           from selenium.webdriver.common.by import By
           from webdriver_manager.chrome import ChromeDriverManager
           import time
@@ -34,13 +35,13 @@ jobs:
           options.add_argument("--disable-dev-shm-usage")
           options.add_argument("--disable-gpu")
 
-          driver = webdriver.Chrome(executable_path=ChromeDriverManager().install(), options=options)
+          service = Service(ChromeDriverManager().install())
+          driver = webdriver.Chrome(service=service, options=options)
 
           print("Opening Colab notebook...")
           driver.get("https://colab.research.google.com/github/prkpushp/animated/blob/main/Fooocus_Colab.ipynb")
           time.sleep(15)
 
-          # Try to click 'Run anyway' button if appears
           try:
               run_anyway = driver.find_element(By.XPATH, "//paper-button[contains(., 'Run anyway')]")
               run_anyway.click()
@@ -49,7 +50,6 @@ jobs:
           except:
               print("No 'Run anyway' prompt.")
 
-          # Click on Runtime > Run all
           try:
               driver.find_element(By.ID, "runtime-menu-button").click()
               time.sleep(2)
@@ -59,7 +59,7 @@ jobs:
               print("Error clicking Run all:", e)
 
           print("Waiting for 5 minutes while notebook runs...")
-          time.sleep(300)  # Wait for 5 minutes
+          time.sleep(300)
           driver.quit()
           print("Finished execution.")
           EOF
