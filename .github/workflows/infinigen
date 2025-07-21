@@ -1,0 +1,50 @@
+name: Render Infinigen Scene
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * *' # Run daily at 6 AM UTC
+
+jobs:
+  infinigen-render:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Install Blender
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y blender ffmpeg
+
+      - name: Install Python Deps
+        run: |
+          sudo apt-get install -y python3-pip
+          pip install -r requirements.txt
+
+      - name: Clone Infinigen
+        run: |
+          git clone https://github.com/allenai/infinigen.git
+          cd infinigen
+          git submodule update --init --recursive
+
+      - name: Generate Forest Scene
+        run: |
+          cd infinigen
+          python scripts/generate_scene.py --config configs/forest.yaml
+
+      - name: Render Scene with Blender
+        run: |
+          blender -b infinigen/outputs/scene.blend -o //infinigen/output/frame_ -F FFmpeg -x 1 -a
+
+      - name: Post-process with FFmpeg (Loop 3 minutes)
+        run: |
+          mkdir -p output
+          ffmpeg -stream_loop 2 -i infinigen/output/frame_0001-1000.mp4 \
+            -c:v libx264 -pix_fmt yuv420p -t 180 output/final.mp4
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: final-video
+          path: output/final.mp4
