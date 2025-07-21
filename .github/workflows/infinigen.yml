@@ -17,16 +17,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y blender ffmpeg
 
-      - name: Install Python Deps
-        run: |
-          sudo apt-get install -y python3-pip
-          pip install -r requirements.txt
-
       - name: Clone Infinigen
         run: |
           git clone https://github.com/allenai/infinigen.git
           cd infinigen
           git submodule update --init --recursive
+
+      - name: Install Python Deps
+        run: |
+          sudo apt-get install -y python3-pip
+          cd infinigen
+          pip install -r requirements.txt
 
       - name: Generate Forest Scene
         run: |
