@@ -44,7 +44,7 @@ jobs:
             -c:v libx264 -pix_fmt yuv420p -t 180 output/final.mp4
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: final-video
           path: output/final.mp4
