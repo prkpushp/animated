@@ -53,7 +53,7 @@ jobs:
           PROMPT_INPUT="${{ inputs.prompt }}"
 
           if [ -z "$PROMPT_INPUT" ]; then
-            PROMPT_INPUT="Create a peaceful, sleep-enhancing audio and video experience. Include soft rain sounds, stream flowing, ambient forest visuals, gentle piano melodies, and nature-based healing energy, ultra green scenery, water, 4k, Ultrarealistic"
+            PROMPT_INPUT="Create a peaceful, sleep-enhancing audio and video experience. Include soft rain sounds, one of (stream, river, waterfall, tibetian bowl)  , ambient forest visuals with either morning or evening bright sunlight, gentle piano melodies, and nature-based healing energy, ultra green scenery, 4k, Ultrarealistic"
           fi
 
           ACCESS_TOKEN=$(gcloud auth print-access-token)
