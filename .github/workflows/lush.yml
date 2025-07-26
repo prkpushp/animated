@@ -1,46 +1,46 @@
-name: Generate Veo3 Video
+name: Generate Veo3 Video and Store as Artifact
 
 on:
   workflow_dispatch:
 
 jobs:
-  generate-veo3-video:
+  generate-veo3:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      id-token: write
+
     steps:
-      - name: Checkout repo
+      - name: Checkout Repo
         uses: actions/checkout@v4
 
       - name: Set up Google Cloud CLI
         uses: google-github-actions/setup-gcloud@v2
         with:
-          install_components: 'beta'
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
 
-      - name: Generate video using Veo 3
-        id: generate-veo3
+      - name: Extract Project ID from Key JSON
+        id: project-id
+        run: |
+          echo "${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" > key.json
+          echo "PROJECT_ID=$(jq -r .project_id key.json)" >> $GITHUB_ENV
+
+      - name: Generate Veo 3 Video
+        id: generate-video
         run: |
           set -e
-          mkdir -p output
-
-          # Save the secret to a file
-          echo "${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" > key.json
-
-          # Extract project_id from key.json
-          PROJECT_ID=$(jq -r '.project_id' key.json)
           LOCATION_ID="us-central1"
-          API_ENDPOINT="${LOCATION_ID}-aiplatform.googleapis.com"
           MODEL_ID="veo-3.0-fast-generate-preview"
-
-          # Authenticate to Google Cloud
-          gcloud auth activate-service-account --key-file=key.json
-          gcloud config set project "$PROJECT_ID"
+          API_ENDPOINT="$LOCATION_ID-aiplatform.googleapis.com"
+          STORAGE_URI="gs://helloranjan1/output/"
 
           ACCESS_TOKEN=$(gcloud auth print-access-token)
 
-          # Prepare the Veo3 request JSON
-          cat > request.json << 'EOF'
+          cat > request.json <<EOF
           {
-            "endpoint": "projects/PROJECT_ID_PLACEHOLDER/locations/us-central1/publishers/google/models/veo-3.0-fast-generate-preview",
+            "endpoint": "projects/$PROJECT_ID/locations/$LOCATION_ID/publishers/google/models/$MODEL_ID",
             "instances": [
               {
                 "prompt": "Two people standing near a tea stall in the evening. One looks curious, the other is confident. The sky is warm orange. Include subtitles in Hindi.\n\nDialogue:\nPerson 1: \"Yeh AI kya sach mein insaan ki madad karta hai?\"\nPerson 2 (smiling): \"Bilkul! Samay bachata hai, aur kaam bhi smart banata hai.\""
@@ -48,29 +48,56 @@ jobs:
             ],
             "parameters": {
               "aspectRatio": "16:9",
-              "sampleCount": 2,
+              "sampleCount": 1,
               "durationSeconds": "8",
               "personGeneration": "allow_adult",
               "addWatermark": true,
               "includeRaiReason": true,
               "generateAudio": true,
-              "resolution": "720p"
+              "resolution": "720p",
+              "storageUri": "$STORAGE_URI"
             }
           }
           EOF
 
-          # Replace placeholder with actual project ID
-          sed -i "s/PROJECT_ID_PLACEHOLDER/$PROJECT_ID/g" request.json
-
-          echo "🎬 Sending request to Veo 3..."
-
-          OPERATION_RESPONSE=$(curl -s -X POST \
-            -H "Content-Type: application/json" \
+          echo "🎬 Submitting Veo 3 generation request..."
+          OPERATION_ID=$(curl -s -X POST \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
             "https://${API_ENDPOINT}/v1/projects/${PROJECT_ID}/locations/${LOCATION_ID}/publishers/google/models/${MODEL_ID}:predictLongRunning" \
-            -d @request.json)
+            -d @request.json | jq -r '.name')
 
-          OPERATION_ID=$(echo "$OPERATION_RESPONSE" | jq -r '.name')
+          echo "operation_id=$OPERATION_ID" >> $GITHUB_OUTPUT
 
-          echo "🆔 OPERATION_ID: $OPERATION_ID"
-          echo "operation_id=$OPERATION_ID" >> "$GITHUB_OUTPUT"
+      - name: Poll Until Video is Ready
+        id: poll-video
+        run: |
+          echo "Polling for operation completion..."
+          for i in {1..20}; do
+            STATUS=$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+              "https://us-central1-aiplatform.googleapis.com/v1/${{ steps.generate-video.outputs.operation_id }}")
+
+            DONE=$(echo "$STATUS" | jq -r '.done')
+            if [ "$DONE" = "true" ]; then
+              echo "✅ Operation complete"
+              echo "$STATUS" > operation_response.json
+              break
+            fi
+            echo "⏳ Still processing... waiting 10s"
+            sleep 10
+          done
+
+      - name: Download Video from GCS
+        id: download
+        run: |
+          mkdir -p video_output
+          VIDEO_URI=$(jq -r '.response.predictions[0].videoUri' operation_response.json)
+          echo "📥 Downloading from: $VIDEO_URI"
+
+          gsutil cp "$VIDEO_URI" video_output/veo3_output.mp4
+
+      - name: Upload Video as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: veo3-video
+          path: video_output/veo3_output.mp4
