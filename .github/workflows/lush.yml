@@ -20,7 +20,7 @@
 
     # Prepare the Veo 3 video generation request
     cat > request.json << 'EOF'
-{
+    {
   "endpoint": "projects/PROJECT_ID_PLACEHOLDER/locations/us-central1/publishers/google/models/veo-3.0-fast-generate-preview",
   "instances": [
     {
