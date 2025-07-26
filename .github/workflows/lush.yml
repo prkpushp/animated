@@ -15,11 +15,41 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@v4
 
-      - name: Set up Google Cloud CLI
+      # Authenticate to Google Cloud
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
+          create_credentials_file: true
+
+      # Debug: Check service account key file
+      - name: Debug service account key
+        run: |
+          if [ -f "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
+            echo "Service account key file found at $GOOGLE_APPLICATION_CREDENTIALS"
+            cat $GOOGLE_APPLICATION_CREDENTIALS | jq .client_email
+          else
+            echo "Error: Service account key file not found"
+            exit 1
+          fi
+
+      # Set up Google Cloud SDK
+      - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-          service_account_key: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
+          project_id: omega-episode-454707-j5
+
+      # Verify authentication
+      - name: Verify Google Cloud authentication
+        run: |
+          gcloud auth list
+          gcloud config set project omega-episode-454707-j5
+          if ! gcloud auth print-access-token; then
+            echo "Error: Authentication failed"
+            exit 1
+          fi
+          echo "Authentication successful"
 
       - name: Extract Project ID from Key JSON
         id: project-id
