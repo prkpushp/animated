@@ -1,26 +1,45 @@
-- name: Generate video using Veo 3
-  id: generate-veo3
-  run: |
-    set -e
-    mkdir -p output
+name: Generate Veo3 Video
 
-    echo "${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" > key.json
+on:
+  workflow_dispatch:
 
-    # Extract project_id from the service account JSON
-    PROJECT_ID=$(jq -r '.project_id' key.json)
-    LOCATION_ID="us-central1"
-    API_ENDPOINT="${LOCATION_ID}-aiplatform.googleapis.com"
-    MODEL_ID="veo-3.0-fast-generate-preview"
+jobs:
+  generate-veo3-video:
+    runs-on: ubuntu-latest
 
-    # Authenticate
-    gcloud auth activate-service-account --key-file=key.json
-    gcloud config set project "$PROJECT_ID"
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-    ACCESS_TOKEN=$(gcloud auth print-access-token)
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: 'beta'
 
-    # Prepare the Veo 3 video generation request
-    cat > request.json << 'EOF'
-    {
+      - name: Generate video using Veo 3
+        id: generate-veo3
+        run: |
+          set -e
+          mkdir -p output
+
+          # Save the secret to a file
+          echo "${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" > key.json
+
+          # Extract project_id from key.json
+          PROJECT_ID=$(jq -r '.project_id' key.json)
+          LOCATION_ID="us-central1"
+          API_ENDPOINT="${LOCATION_ID}-aiplatform.googleapis.com"
+          MODEL_ID="veo-3.0-fast-generate-preview"
+
+          # Authenticate to Google Cloud
+          gcloud auth activate-service-account --key-file=key.json
+          gcloud config set project "$PROJECT_ID"
+
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+
+          # Prepare the Veo3 request JSON
+          cat > request.json << 'EOF'
+          {
   "endpoint": "projects/PROJECT_ID_PLACEHOLDER/locations/us-central1/publishers/google/models/veo-3.0-fast-generate-preview",
   "instances": [
     {
@@ -40,18 +59,18 @@
 }
 EOF
 
-    # Replace PROJECT_ID placeholder
-    sed -i "s/PROJECT_ID_PLACEHOLDER/$PROJECT_ID/g" request.json
+          # Replace placeholder with actual project ID
+          sed -i "s/PROJECT_ID_PLACEHOLDER/$PROJECT_ID/g" request.json
 
-    echo "🎬 Sending request to Veo 3..."
+          echo "🎬 Sending request to Veo 3..."
 
-    OPERATION_RESPONSE=$(curl -s -X POST \
-      -H "Content-Type: application/json" \
-      -H "Authorization: Bearer $ACCESS_TOKEN" \
-      "https://${API_ENDPOINT}/v1/projects/${PROJECT_ID}/locations/${LOCATION_ID}/publishers/google/models/${MODEL_ID}:predictLongRunning" \
-      -d @request.json)
+          OPERATION_RESPONSE=$(curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://${API_ENDPOINT}/v1/projects/${PROJECT_ID}/locations/${LOCATION_ID}/publishers/google/models/${MODEL_ID}:predictLongRunning" \
+            -d @request.json)
 
-    OPERATION_ID=$(echo "$OPERATION_RESPONSE" | jq -r '.name')
+          OPERATION_ID=$(echo "$OPERATION_RESPONSE" | jq -r '.name')
 
-    echo "🆔 OPERATION_ID: $OPERATION_ID"
-    echo "operation_id=$OPERATION_ID" >> "$GITHUB_OUTPUT"
+          echo "🆔 OPERATION_ID: $OPERATION_ID"
+          echo "operation_id=$OPERATION_ID" >> "$GITHUB_OUTPUT"
