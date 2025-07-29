@@ -67,7 +67,7 @@ jobs:
             -H "Authorization: Bearer $(gcloud auth print-access-token)" \
             -H "Content-Type: application/json" \
             "https://${API_ENDPOINT}/v1/projects/${PROJECT_ID}/locations/${LOCATION_ID}/publishers/google/models/${MODEL_ID}:predictLongRunning" \
-            -d @request.json | sed -n 's/.*"name": "\(.*\)".*/\1/p')
+            -d @request.json)
 
           echo "operation_id=$OPERATION_ID" >> $GITHUB_OUTPUT
           echo "OPERATION_ID=$OPERATION_ID"
