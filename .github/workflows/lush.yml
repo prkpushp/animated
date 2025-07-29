@@ -85,11 +85,9 @@ jobs:
           MAX_ATTEMPTS=30
           ATTEMPT=1
           while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-            cat << EOF > fetch.json
-            {
-              "operationName": "$OPERATION_NAME"
-            }
-            EOF
+            echo '{
+              "operationName": "'"$OPERATION_NAME"'"
+            }' > fetch.json
 
             RESPONSE=$(curl -s \
               -X POST \
