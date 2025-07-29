@@ -43,26 +43,26 @@ jobs:
           ACCESS_TOKEN=$(gcloud auth print-access-token)
 
           cat > request.json <<EOF
-          {
-            "endpoint": "projects/$PROJECT_ID/locations/$LOCATION_ID/publishers/google/models/$MODEL_ID",
-            "instances": [
-              {
-                "prompt": "Two people standing near a tea stall in the evening. One looks curious, the other is confident. The sky is warm orange. Include subtitles in Hindi.\n\nDialogue:\nPerson 1: \"Yeh AI kya sach mein insaan ki madad karta hai?\"\nPerson 2 (smiling): \"Bilkul! Samay bachata hai, aur kaam bhi smart banata hai.\""
-              }
-            ],
-            "parameters": {
-              "aspectRatio": "16:9",
-              "sampleCount": 1,
-              "durationSeconds": "8",
-              "personGeneration": "allow_adult",
-              "addWatermark": true,
-              "includeRaiReason": true,
-              "generateAudio": true,
-              "resolution": "720p",
-              "storageUri": "$STORAGE_URI"
-            }
-          }
-          EOF
+{
+  "endpoint": "projects/$PROJECT_ID/locations/$LOCATION_ID/publishers/google/models/$MODEL_ID",
+  "instances": [
+    {
+      "prompt": "Two people standing near a tea stall in the evening. One looks curious, the other is confident. The sky is warm orange. Include subtitles in Hindi.\n\nDialogue:\nPerson 1: \"Yeh AI kya sach mein insaan ki madad karta hai?\"\nPerson 2 (smiling): \"Bilkul! Samay bachata hai, aur kaam bhi smart banata hai.\""
+    }
+  ],
+  "parameters": {
+    "aspectRatio": "16:9",
+    "sampleCount": 1,
+    "durationSeconds": "8",
+    "personGeneration": "allow_adult",
+    "addWatermark": true,
+    "includeRaiReason": true,
+    "generateAudio": true,
+    "resolution": "720p",
+    "storageUri": "$STORAGE_URI"
+  }
+}
+EOF
 
           echo "🎬 Submitting Veo 3 generation request..."
           OPERATION_ID=$(curl -s -X POST \
@@ -96,7 +96,6 @@ jobs:
           done
 
       - name: Download Video from GCS
-        id: download
         run: |
           mkdir -p video_output
           VIDEO_URI=$(jq -r '.response.predictions[0].videoUri' operation_response.json)
