@@ -66,8 +66,7 @@ jobs:
           OPERATION_ID=$(curl -s -X POST \
             -H "Authorization: Bearer $(gcloud auth print-access-token)" \
             -H "Content-Type: application/json" \
-            "https://${API_ENDPOINT}/v1/projects/${PROJECT_ID}/locations/${LOCATION_ID}/publishers/google/models/${MODEL_ID}:predictLongRunning" \
-            -d @request.json)
+            "https://${API_ENDPOINT}/v1/projects/${PROJECT_ID}/locations/${LOCATION_ID}/publishers/google/models/${MODEL_ID}:predictLongRunning" \)
 
           echo "operation_id=$OPERATION_ID" >> $GITHUB_OUTPUT
           echo "OPERATION_ID=$OPERATION_ID"
