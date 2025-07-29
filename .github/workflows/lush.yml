@@ -74,24 +74,52 @@ jobs:
       - name: Poll Until Video is Ready
         id: poll-video
         run: |
-          echo "Polling for operation completion..."
-          for i in {1..20}; do
+          set -e
+          echo "Polling for video generation completion..."
+
+          LOCATION_ID="us-central1"
+          MODEL_ID="veo-3.0-fast-generate-preview"
+          API_ENDPOINT="$LOCATION_ID-aiplatform.googleapis.com"
+          OPERATION_NAME="${{ steps.generate-video.outputs.operation_id }}"
+
+          MAX_ATTEMPTS=30
+          ATTEMPT=1
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            cat << EOF > fetch.json
+            {
+              "operationName": "$OPERATION_NAME"
+            }
+            EOF
+
             RESPONSE=$(curl -s \
+              -X POST \
               -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-              "https://us-central1-aiplatform.googleapis.com/v1/${{ steps.generate-video.outputs.operation_id }}")
+              -H "Content-Type: application/json" \
+              "https://${API_ENDPOINT}/v1/projects/${{ env.PROJECT_ID }}/locations/${LOCATION_ID}/publishers/google/models/${MODEL_ID}:fetchPredictOperation" \
+              -d @fetch.json)
 
             echo "$RESPONSE" > response.json
+            DONE=$(echo "$RESPONSE" | grep -o '"done": true')
 
-            DONE=$(jq -r '.done' response.json)
-            if [ "$DONE" == "true" ]; then
-              echo "✅ Operation complete"
-              cp response.json operation_response.json
+            if [ -n "$DONE" ]; then
+              echo "✅ Video generation complete!"
+              VIDEO_URI=$(echo "$RESPONSE" | jq -r '.response.videos[].gcsUri' 2>/dev/null | grep '\.mp4$' | head -n 1)
+              echo "VIDEO_URI=$VIDEO_URI" >> $GITHUB_ENV
+              echo "video_uri=$VIDEO_URI" >> $GITHUB_OUTPUT
               break
             fi
 
-            echo "⏳ Still processing... waiting 10s"
+            echo "⏳ Attempt $ATTEMPT/$MAX_ATTEMPTS: Still generating. Retrying in 10 seconds..."
             sleep 10
+            ATTEMPT=$((ATTEMPT + 1))
           done
+
+          if [ -z "$VIDEO_URI" ]; then
+            echo "❌ ERROR: Video generation did not complete in time or URI missing"
+            cat response.json
+            exit 1
+          fi
+
 
       - name: Download Video from GCS
         run: |
