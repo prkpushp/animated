@@ -15,21 +15,19 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@v4
 
-      - name: Set up Google Cloud CLI
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-          service_account_key: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
-
-      - name: Extract Project ID from Key JSON & Authenticate
+      # Authenticate to Google Cloud
+      - name: Authenticate to Google Cloud
         id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
+          create_credentials_file: true
+
+      - name: Extract Project ID from Key JSON 
         run: |
           echo '${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}' > key.json
           PROJECT_ID=$(jq -r .project_id key.json)
           echo "PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
-
-          gcloud auth activate-service-account --key-file=key.json
-          gcloud config set project $PROJECT_ID
 
       - name: Generate Veo 3 Video
         id: generate-video
