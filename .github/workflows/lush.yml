@@ -64,10 +64,10 @@ jobs:
 
           echo "🎬 Submitting Veo 3 generation request..."
           OPERATION_ID=$(curl -s -X POST \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Authorization: Bearer $(gcloud auth print-access-token)" \
             -H "Content-Type: application/json" \
             "https://${API_ENDPOINT}/v1/projects/${PROJECT_ID}/locations/${LOCATION_ID}/publishers/google/models/${MODEL_ID}:predictLongRunning" \
-            -d @request.json | jq -r '.name')
+            -d @request.json | sed -n 's/.*"name": "\(.*\)".*/\1/p')
 
           echo "operation_id=$OPERATION_ID" >> $GITHUB_OUTPUT
           echo "OPERATION_ID=$OPERATION_ID"
