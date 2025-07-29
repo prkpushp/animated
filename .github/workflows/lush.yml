@@ -70,6 +70,7 @@ jobs:
             -d @request.json | jq -r '.name')
 
           echo "operation_id=$OPERATION_ID" >> $GITHUB_OUTPUT
+          echo "OPERATION_ID=$OPERATION_ID"
 
       - name: Poll Until Video is Ready
         id: poll-video
