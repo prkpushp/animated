@@ -12,92 +12,44 @@ LOCAL_DIR="./videos"
 # Create local directory if it doesn't exist
 mkdir -p "$LOCAL_DIR"
 
-# List of animals with descriptions
-ANIMALS=(
-  "adorably chubby orange tabby kitten with twinkling, oversized eyes and extra fluffy whiskers"
-  "tiny, irresistibly cute mouse with giant, sparkling ears and a wiggly, pink nose"
-  "panda cub with a round, plushy belly and the sweetest, innocent smile"
-  "fox cub with a poofy, ultra-fluffy tail and big, glittering eyes full of mischief"
-  "baby bunny with the softest fur, floppy ears, and the tiniest, twitching nose"
-  "hamster with plump, squishy cheeks and dainty, miniature paws"
-  "tiny pug puppy with sparkling, googly eyes and an endlessly wagging, curly tail"
-  "plush platypus with a shiny, button-like bill and a silly, waddling walk"
-  "small, expressive chameleon with big, googly eyes and a curly, adorable tail"
-  "pink, teensy piglet with a super curly tail and bouncy, happy steps"
-  "lion cub with a fluffy, spiky mane and the most endearing, playful pounce"
-  "tiger cub with bold, plush stripes and a swishing, energetic tail"
-  "penguin chick with a round, wobbly body and shiny, flapping flippers"
-  "koala baby with fuzzy, oversized ears and a sleepy, cuddly face"
-  "polar bear cub with snowy, cloud-like fur and clumsy, tumbling rolls"
-  "hedgehog with soft, pastel-colored quills and a curious, twitchy nose"
-  "baby elephant with a super wiggly trunk and giant, floppy feet"
-  "red panda cub with a bushy, striped tail and nimble, playful climbs"
-  "alpaca or llama with a poofy, woolly coat and an adorably sassy strut"
-  "duckling with fluffy, golden feathers and a chirpy, happy bounce"
-  "seal pup with shiny, silky fur and the cutest, rolling dives"
-  "otter pup with a sleek, twisty body and a cheeky, splashing spin"
-  "smiley baby tortoise with a glossy, patterned shell and slow, goofy steps"
-  "fluffy yellow chick with a round, bouncy body and tiny, flapping wings"
-  "squirrel with a bushy, twitchy tail and the cutest, darting leaps"
-  "deer fawn with big, sparkling eyes and delicate, skipping steps"
-  "floppy-eared beagle puppy with a wagging tail and bouncy, joyful bounds"
-  "bubbly goldfish with shimmering, flowing fins and a wide-eyed, happy stare"
-  "owl chick with fuzzy, round feathers and huge, blinking eyes"
-  "gecko with sticky, chubby toes and a flicking, animated tongue"
-)
+#!/bin/bash
 
-# Arrays for elaborative prompt components
-SETTINGS=(
-  "sunlit meadow with wildflowers and buzzing bees"
-  "misty jungle clearing with dangling vines"
-  "sandy beach with crashing waves and seagull cries"
-  "lush forest with towering trees and dappled sunlight"
-  "rocky mountain slope under a vibrant blue sky"
-  "neon-lit cyberpunk city with flickering holograms"
-  "whimsical enchanted forest with glowing mushrooms"
-  "snowy tundra with swirling snowflakes"
-  "bustling cartoon village with colorful houses"
-  "starlit desert with cacti and a glowing moon"
-)
-ACTION_STYLES=(
-  "fighting"
-  "mocking"
-  "slapping"
-  "rebuking"
-  "carrying giant whales on shoulders"
-  "carrying giant baby elephant on shoulders"
-  "clashing playfully with goofy, wobbly stumbles"
-)
-ATMOSPHERES=(
-  "under a golden sunset with warm, rosy hues"
-  "with leaves swirling in a playful breeze"
-  "beneath a starry sky with twinkling constellations"
-  "in the glow of dawn with soft, pastel colors"
-  "amidst a gentle mist with shimmering droplets"
-  "with glowing fireflies dancing in the air"
-  "under a rainbow arch with sparkling light"
-  "with dramatic thunderclouds and flashing lightning"
-)
-VISUAL_STYLES=(
-  "in a colorful 2D cartoon style with bold outlines"
-  "with Pixar-like charm and vibrant textures"
-  "in a vibrant 3D anime style with shiny effects"
-  "with hand-drawn sketchbook charm and wobbly lines"
-  "in a retro 8-bit pixel art style with quirky charm"
-  "with a claymation-like bounce and squishy shapes"
-)
+# Define project and model details for PROMPT
+LOCATION_ID_PROMPT="global"
+API_ENDPOINT_PROMPT="aiplatform.googleapis.com"
+MODEL_ID_PROMPT="gemini-2.5-flash-lite"
+GENERATE_CONTENT_API_PROMPT="streamGenerateContent"
 
-# Randomly select prompt components
-SELECTED_ANIMALS=($(printf "%s\n" "${ANIMALS[@]}" | shuf -n 2))
-ANIMAL1="${SELECTED_ANIMALS[0]}"
-ANIMAL2="${SELECTED_ANIMALS[1]}"
-SETTING=$(printf "%s\n" "${SETTINGS[@]}" | shuf -n 1)
-ACTION_STYLE=$(printf "%s\n" "${ACTION_STYLES[@]}" | shuf -n 1)
-ATMOSPHERE=$(printf "%s\n" "${ATMOSPHERES[@]}" | shuf -n 1)
-VISUAL_STYLE=$(printf "%s\n" "${VISUAL_STYLES[@]}" | shuf -n 1)
+# Create request body
+cat <<EOF > request.json
+{
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "Give me only a single, self-contained prompt for a Veo 2 video in Disney-Pixar 3D cartoon style. The prompt should describe a visually captivating and emotionally powerful short scene. Return only the prompt. No explanations, no breakdown, no formatting—just the prompt text."
+        }
+      ]
+    }
+  ]
+}
+EOF
 
-# Construct elaborative prompt for animated characters
-PROMPT="In a ${SETTING}, an exquisitely detailed, ultra high definition, super cute Disney Pixar 3D Style ${ANIMAL1} ${ACTION_STYLE} an equally adorable ${ANIMAL2}, their expressions and movements extra lively and endearing, ${ATMOSPHERE}, rendered ${VISUAL_STYLE} with soft, luminous lighting and a premium fine-quality finish"
+# Step 1: Save response
+curl -s \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  "https://${API_ENDPOINT_PROMPT}/v1/projects/${PROJECT_ID}/locations/${LOCATION_ID_PROMPT}/publishers/google/models/${MODEL_ID_PROMPT}:${GENERATE_CONTENT_API_PROMPT}" \
+  -d @request.json > prompt_lines.jsonl
+
+# Step 2: Extract + combine prompt
+PROMPT=$(jq -r '.[] | .candidates[0].content.parts[0].text' prompt_lines.jsonl | paste -sd '' -)
+
+# Step 3: Display
+echo -e "\n✅ Final Prompt:\n$PROMPT"
+
 
 # Sanitize prompt for filename (replace spaces with underscores, remove special characters)
 SANITIZED_PROMPT=$(echo "$PROMPT" | tr ' ' '_' | tr -dc '[:alnum:]_-' | cut -c 1-200)
