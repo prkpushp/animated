@@ -53,7 +53,7 @@ jobs:
           PROMPT_INPUT="${{ inputs.prompt }}"
 
           if [ -z "$PROMPT_INPUT" ]; then
-            PROMPT_INPUT="Create a peaceful, sleep-enhancing audio and video experience. Include soft rain sounds, one of (stream, river, waterfall, tibetian bowl)  , ambient forest visuals with either morning or evening bright sunlight, gentle piano melodies, and nature-based healing energy, ultra green scenery, 4k, Ultrarealistic"
+            PROMPT_INPUT="Generate one and only one tranquil, hyperrealistic natural scene in ultra-high resolution (16K HDR style) for meditation or relaxation, randomly chosen from a predefined list of peaceful environments (e.g., jungle waterfall, misty pine forest with cabin, mossy riverbank, alpine lake, enchanted fairytale house, serene Japanese garden, cherry blossom grove, snowy cottage, lavender field, canyon spring, or forest trail), using soft natural lighting like sunrise, sunset, or misty glow, emphasizing stillness, peace, and dreamlike serenity without combining multiple scene elements."
           fi
 
           ACCESS_TOKEN=$(gcloud auth print-access-token)
@@ -171,7 +171,7 @@ jobs:
           curl -s -X POST \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
-            "https://us-central1-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/us-central1/publishers/google/models/imagen-3.0-generate-002:predict" \
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/us-central1/publishers/google/models/imagen-4.0-generate-preview-06-06:predict" \
             -d @request_image.json \
             -o response_image.json
       
