@@ -23,19 +23,16 @@ cat <<EOF > request.json
 }
 EOF
 
-# Save curl response to variable
-PROMPT=$(curl -s \
+# Save streamed response to variable
+PROMPT_STREAM=$(curl -s \
   -X POST \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $(gcloud auth print-access-token)" \
   "https://${API_ENDPOINT}/v1/projects/${PROJECT_ID}/locations/${LOCATION_ID}/publishers/google/models/${MODEL_ID}:${GENERATE_CONTENT_API}" \
   -d @request.json)
 
-# Optional: print the raw JSON
+# Extract text fields from all streamed chunks and concatenate
+PROMPT=$(echo "$PROMPT_STREAM" | jq -r '.candidates[].content.parts[].text' | tr -d '\n')
+
+# Print the final combined prompt
 echo "$PROMPT"
-
-# Get only the generated prompt text
-PROMPT_TEXT=$(echo "$PROMPT" | jq -r '.candidates[0].content.parts[0].text')
-
-# Print the clean prompt
-echo "$PROMPT_TEXT"
