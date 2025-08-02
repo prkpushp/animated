@@ -1,9 +1,11 @@
 #!/bin/bash
 DATE=$(date +"%d%m%y")
+HOUR=$(date -u +"%H")
+
 
 IMAGE=`ls output/*.png`
 AUDIO=`ls output/*.wav`
-OUTPUT="output/${DATE}video10.mp4"
+OUTPUT="output/${HOUR}.mp4"
 DURATION=${1:-3600}
 
 if [ ! -f "$IMAGE" ]; then
