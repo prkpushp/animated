@@ -34,6 +34,20 @@ jobs:
           export PROJECT_ID=$(jq -r .project_id < "${{ env.GOOGLE_APPLICATION_CREDENTIALS }}")
           echo "PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
 
+      - name: Get current UTC hour
+        id: get_hour
+        run: echo "hour=$(date -u +'%H')" >> $GITHUB_OUTPUT
+        
+      - name: Set argument based on UTC hour
+        id: set_arg
+        run: |
+          case "${{ steps.get_hour.outputs.hour }}" in
+            "00") echo "arg=900" >> $GITHUB_OUTPUT ;;
+            "01") echo "arg=" >> $GITHUB_OUTPUT ;;
+            "02") echo "arg=14400" >> $GITHUB_OUTPUT ;;
+            *) echo "arg=default" >> $GITHUB_OUTPUT ;;
+          esac          
+
       - name: Set up Google Cloud CLI
         uses: google-github-actions/setup-gcloud@v2
         with:
@@ -239,7 +253,7 @@ jobs:
 
 
       - name: 🛠️ Run Bash video script
-        run: bash scripts/make_video.sh
+        run: bash scripts/make_video.sh ${{ steps.set_arg.outputs.arg }}
 
       - name: Upload media artifact
         uses: actions/upload-artifact@v4
