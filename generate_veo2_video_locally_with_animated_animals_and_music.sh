@@ -23,7 +23,7 @@ cat <<EOF > request.json
 }
 EOF
 
-# Save streamed response to variable
+# Save streamed output into variable
 PROMPT_STREAM=$(curl -s \
   -X POST \
   -H "Content-Type: application/json" \
@@ -31,8 +31,9 @@ PROMPT_STREAM=$(curl -s \
   "https://${API_ENDPOINT}/v1/projects/${PROJECT_ID}/locations/${LOCATION_ID}/publishers/google/models/${MODEL_ID}:${GENERATE_CONTENT_API}" \
   -d @request.json)
 
-# Extract text fields from all streamed chunks and concatenate
-PROMPT=$(echo "$PROMPT_STREAM" | jq -r '.candidates[].content.parts[].text' | tr -d '\n')
+# Convert multiline JSON chunks into one full string prompt
+PROMPT=$(echo "$PROMPT_STREAM" | jq -r '.candidates[].content.parts[].text' | paste -sd '' -)
 
-# Print the final combined prompt
+# Print the final prompt
 echo "$PROMPT"
+
