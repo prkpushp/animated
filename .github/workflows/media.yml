@@ -229,6 +229,14 @@ jobs:
             fi
           fi
 
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: media-output-${{ github.run_id }}-${{ github.run_number }}
+          path: |
+            output/*.png
+          retention-days: 7          
+
 
       - name: 🛠️ Run Bash video script
         run: bash scripts/make_video.sh
