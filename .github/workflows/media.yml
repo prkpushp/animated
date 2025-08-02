@@ -8,7 +8,9 @@ on:
         required: false
         type: string
   schedule:
-    - cron: '30 0 * * *' # Runs every day at 6:00 AM IST (00:30 UTC)
+    - cron: '00 0 * * *' # Runs every day at 5:30 AM IST (00:00 UTC)
+    - cron: '00 1 * * *' # 6:30 AM IST
+    - cron: '00 2 * * *' # 7:30 AM IST
 
 jobs:
   generate-media:
