@@ -7,6 +7,8 @@ API_ENDPOINT="us-central1-aiplatform.googleapis.com"
 MODEL_ID="veo-3.0-fast-generate-001"
 STORAGE_URI="gs://qwiklabs-gcp-03-2e48b5d7d8f6-labconfig-bucket/output/"
 LOCAL_DIR="./videos"
+AUTH_TOKEN="ya29.A0AS3H6NzPNGlIqEqIan54-vFNMp00hSgZF7xLgtj04CBL4uYrX4eNdWW630G9cUxLXV-NgWT27T5xEAMA0f_aOK2rOxrdSfGEl64ugPkxzZkuADFesw2SIdbsSoXhxbvRIsC9n3FCUxELZaYmQvvxeNZOVrNZEgGcxPDg1xfqLPN-jF102BJjRowIn5HJDY5j_29CQNK72gmoXjk_pfzkPEUGq8X20S4FLatEDrqD0BVRRyCJxuTZ6fOwMyEaC0PMmRawbNrcMZ1YGUiyx16CKYuAg7O4p4AU3qv4DlasWRYOqOChxxa7uqquaxdPc-AWZbWOZdQir7YvVihiTl4cteUUw2QuLzl4Ee3RaCgYKAVQSARISFQHGX2Mi8pp1E-iY1GFvGbXIWUKUXQ0363"
+
 
 # Create local directory if it doesn't exist
 mkdir -p "$LOCAL_DIR"
@@ -63,7 +65,7 @@ echo "Initiating video generation with Veo 2.0..."
 OPERATION_ID=$(curl -s \
   -X POST \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "Authorization: Bearer ${AUTH_TOKEN})" \
   "https://${API_ENDPOINT}/v1/projects/${PROJECT_ID}/locations/${LOCATION_ID}/publishers/google/models/${MODEL_ID}:predictLongRunning" \
   -d '@request.json' | sed -n 's/.*"name": "\(.*\)".*/\1/p')
 
@@ -89,7 +91,7 @@ EOF
   RESPONSE=$(curl -s \
     -X POST \
     -H "Content-Type: application/json" \
-    -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+    -H "Authorization: Bearer ${AUTH_TOKEN}" \
     "https://${API_ENDPOINT}/v1/projects/${PROJECT_ID}/locations/${LOCATION_ID}/publishers/google/models/${MODEL_ID}:fetchPredictOperation" \
     -d '@fetch.json')
 
