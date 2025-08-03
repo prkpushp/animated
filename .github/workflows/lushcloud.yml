@@ -24,7 +24,7 @@ jobs:
           LOCATION_ID="us-central1"
           API_ENDPOINT="us-central1-aiplatform.googleapis.com"
           MODEL_ID="veo-3.0-fast-generate-001"
-          STORAGE_URI="gs://qwiklabs-gcp-00-052a5127bc5c-labconfig-bucket /output/"
+          STORAGE_URI="gs://qwiklabs-gcp-00-052a5127bc5c-labconfig-bucket/output/"
           LOCAL_DIR="./videos"
           mkdir -p "$LOCAL_DIR"
 
