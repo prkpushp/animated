@@ -44,7 +44,7 @@ curl -s \
   -d @request.json > prompt_lines.jsonl
 
 # Step 2: Extract + combine prompt
-PROMPT=$(jq -r '.[] | .candidates[0].content.parts[0].text' prompt_lines.jsonl | paste -sd '' -)
+PROMPT="Create video within Google AI practice only: Tied between two thick trees in a forest glade, a hammock sways with two figures entangled in rain-soaked warmth. The man, shirtless, lies on his side, brushing raindrops off the curvy woman’s shoulder. She’s curled in his arms in a clinging, off-shoulder micro dress, sheer from the monsoon. The camera glides slowly, capturing glistening skin, gentle fingers tracing rain trails, and lips brushing knuckles. Insects buzz softly in the distance."
 
 # Step 3: Display
 echo -e "\n✅ Final Prompt:\n$PROMPT"
