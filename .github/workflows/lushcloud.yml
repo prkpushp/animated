@@ -1,4 +1,4 @@
-name: Generate Veo3 Video
+name: lush art
 
 on:
   workflow_dispatch:
