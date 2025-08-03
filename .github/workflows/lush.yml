@@ -1,4 +1,4 @@
-name: Generate Veo3 Video and Store as Artifact
+name: Lush as Artifact
 
 on:
   workflow_dispatch:
