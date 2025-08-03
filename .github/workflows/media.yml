@@ -251,6 +251,7 @@ jobs:
           name: media-output-${{ github.run_id }}-${{ github.run_number }}
           path: |
             output/*.png
+            output/*.wav
           retention-days: 7          
 
 
@@ -260,7 +261,7 @@ jobs:
       - name: Upload media artifact
         uses: actions/upload-artifact@v4
         with:
-          name: media-output-${{ github.run_id }}-${{ github.run_number }}
+          name: media-output01-${{ github.run_id }}-${{ github.run_number }}
           path: |
             output/
             output/raw_content.txt
