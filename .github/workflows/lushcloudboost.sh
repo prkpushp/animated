@@ -24,7 +24,7 @@ EOF
 PROJECT_ID="qwiklabs-gcp-03-f2cb4051c545"
 LOCATION_ID="us-central1"
 API_ENDPOINT="us-central1-aiplatform.googleapis.com"
-MODEL_ID="veo-3.0-generate-001"
+MODEL_ID="veo-3.0-fast-generate-001"
 
 OPERATION_ID=$(curl \
 -X POST \
