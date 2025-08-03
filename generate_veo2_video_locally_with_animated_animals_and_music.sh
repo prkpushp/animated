@@ -28,7 +28,7 @@ cat <<EOF > request.json
       "role": "user",
       "parts": [
         {
-          "text": "Give me only a single, self-contained prompt for a Veo 2 video in Disney-Pixar 3D cartoon style. The prompt should describe a visually captivating and emotionally powerful short scene. Return only the prompt. No explanations, no breakdown, no formatting—just the prompt text."
+          "text": " Generate a single, self-contained creative prompt for a Veo 2 video in the style of a Disney-Pixar 3D animated cartoon. The prompt should describe a short, emotionally engaging and visually rich scene that can be conveyed effectively in only 8 seconds. Focus on characters or actions that create immediate emotional connection or visual intrigue. The scene should be powerful enough to capture audience attention instantly, even with minimal duration. Return only the prompt text — no explanation, no bullet points, and no formatting."
         }
       ]
     }
