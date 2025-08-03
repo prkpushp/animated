@@ -55,7 +55,7 @@ jobs:
               "storageUri": "${STORAGE_URI}"
             }
           }
-EOF
+          EOF
 
           echo "Requesting video generation..."
           OPERATION_ID=$(curl -s \
