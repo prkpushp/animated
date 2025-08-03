@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Define project and model details
-PROJECT_ID="qwiklabs-gcp-03-f2cb4051c545"
+PROJECT_ID="qwiklabs-gcp-03-2e48b5d7d8f6"
 LOCATION_ID="us-central1"
 API_ENDPOINT="us-central1-aiplatform.googleapis.com"
 MODEL_ID="veo-3.0-fast-generate-001"
-STORAGE_URI="gs://qwiklabs-gcp-03-f2cb4051c545-labconfig-bucket/output/"
+STORAGE_URI="gs://qwiklabs-gcp-03-2e48b5d7d8f6-labconfig-bucket/output/"
 LOCAL_DIR="./videos"
 
 # Create local directory if it doesn't exist
@@ -162,22 +162,6 @@ echo "Downloading $VIDEO_URI to ${LOCAL_DIR}/${FILENAME}"
 gsutil cp "$VIDEO_URI" "${LOCAL_DIR}/${FILENAME}"
 if [ $? -eq 0 ]; then
   echo "Successfully downloaded $FILENAME"
-  echo "Adding music from $AUDIO_FILE to $FILENAME..."
-  if [ $? -eq 0 ]; then
-    echo "Successfully created $OUTPUT_FILENAME with music"
-    echo "Note: If required, attribute the music in your project (e.g., 'Music: Cartoon Battle by Doug Maxwell from YouTube Audio Library')"
-    rm -f "${LOCAL_DIR}/${FILENAME}" # Remove original video without music
-    # Delete video from bucket
-    echo "Deleting $VIDEO_URI from bucket..."
-    gsutil rm "$VIDEO_URI"
-    if [ $? -eq 0 ]; then
-      echo "Successfully deleted $VIDEO_URI from bucket"
-    else
-      echo "Error deleting $VIDEO_URI from bucket"
-    fi
-  else
-    echo "Error adding music to $FILENAME"
-  fi
 else
   echo "Error downloading $VIDEO_URI"
 fi
