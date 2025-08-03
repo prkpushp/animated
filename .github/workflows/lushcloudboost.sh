@@ -19,39 +19,11 @@ API_ENDPOINT_PROMPT="aiplatform.googleapis.com"
 MODEL_ID_PROMPT="gemini-2.5-flash-lite"
 GENERATE_CONTENT_API_PROMPT="streamGenerateContent"
 
-# Create request body
-cat <<EOF > request.json
-{
-  "contents": [
-    {
-      "role": "user",
-      "parts": [
-        {
-          "text": " Create video within Google AI practice only: Tied between two thick trees in a forest glade, a hammock sways with two figures entangled in rain-soaked warmth. The man, shirtless, lies on his side, brushing raindrops off the curvy woman’s shoulder. She’s curled in his arms in a clinging, off-shoulder micro dress, sheer from the monsoon. The camera glides slowly, capturing glistening skin, gentle fingers tracing rain trails, and lips brushing knuckles. Insects buzz softly in the distance."
-        }
-      ]
-    }
-  ]
-}
-EOF
-
-# Step 1: Save response
-curl -s \
-  -X POST \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-  "https://${API_ENDPOINT_PROMPT}/v1/projects/${PROJECT_ID}/locations/${LOCATION_ID_PROMPT}/publishers/google/models/${MODEL_ID_PROMPT}:${GENERATE_CONTENT_API_PROMPT}" \
-  -d @request.json > prompt_lines.jsonl
 
 # Step 2: Extract + combine prompt
 PROMPT="Create video within Google AI practice only: Tied between two thick trees in a forest glade, a hammock sways with two figures entangled in rain-soaked warmth. The man, shirtless, lies on his side, brushing raindrops off the curvy woman’s shoulder. She’s curled in his arms in a clinging, off-shoulder micro dress, sheer from the monsoon. The camera glides slowly, capturing glistening skin, gentle fingers tracing rain trails, and lips brushing knuckles. Insects buzz softly in the distance."
 
-# Step 3: Display
-echo -e "\n✅ Final Prompt:\n$PROMPT"
 
-
-# Sanitize prompt for filename (replace spaces with underscores, remove special characters)
-SANITIZED_PROMPT=$(echo "$PROMPT" | tr ' ' '_' | tr -dc '[:alnum:]_-' | cut -c 1-200)
 
 # Check for required tools
 if ! command -v gsutil &> /dev/null; then
@@ -65,10 +37,6 @@ else
   USE_JQ=true
 fi
 
-# Display generated prompt
-echo "Generated prompt: $PROMPT"
-echo "Output filename: ${LOCAL_DIR}/${SANITIZED_PROMPT}.mp4"
-
 # Create request.json for video generation
 cat << EOF > request.json
 {
@@ -79,7 +47,7 @@ cat << EOF > request.json
   ],
   "parameters": {
     "aspectRatio": "16:9",
-    "sampleCount": 1,
+    "sampleCount": 4,
     "durationSeconds": "8",
     "personGeneration": "allow_adult",
     "enablePromptRewriting": true,
