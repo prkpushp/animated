@@ -47,7 +47,7 @@ jobs:
             "00") echo "arg=900" >> $GITHUB_OUTPUT ;;
             "01") echo "arg=" >> $GITHUB_OUTPUT ;;
             "02") echo "arg=14400" >> $GITHUB_OUTPUT ;;
-            *) echo "arg=default" >> $GITHUB_OUTPUT ;;
+            *) echo "arg=" >> $GITHUB_OUTPUT ;;
           esac          
 
       - name: Set up Google Cloud CLI
