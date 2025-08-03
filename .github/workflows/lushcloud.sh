@@ -1,0 +1,103 @@
+name: Generate Veo3 Video
+
+on:
+  workflow_dispatch:
+
+jobs:
+  generate-video:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          export_default_credentials: false
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: Create video using Veo3
+        env:
+          AUTH_TOKEN: ${{ secrets.AUTH_TOKEN }}
+        run: |
+          set -e
+
+          PROJECT_ID="qwiklabs-gcp-03-2e48b5d7d8f6"
+          LOCATION_ID="us-central1"
+          API_ENDPOINT="us-central1-aiplatform.googleapis.com"
+          MODEL_ID="veo-3.0-fast-generate-001"
+          STORAGE_URI="gs://qwiklabs-gcp-03-2e48b5d7d8f6-labconfig-bucket/output/"
+          LOCAL_DIR="./videos"
+          mkdir -p "$LOCAL_DIR"
+
+          PROMPT="Tied between two thick trees in a forest glade, a hammock sways with two figures entangled in rain-soaked warmth..."
+
+          cat << EOF > request.json
+          {
+            "instances": [
+              {
+                "prompt": "${PROMPT}"
+              }
+            ],
+            "parameters": {
+              "aspectRatio": "16:9",
+              "sampleCount": 1,
+              "durationSeconds": "8",
+              "personGeneration": "allow_adult",
+              "enablePromptRewriting": true,
+              "addWatermark": true,
+              "includeRaiReason": true,
+              "storageUri": "${STORAGE_URI}"
+            }
+          }
+EOF
+
+          echo "Requesting video generation..."
+          OPERATION_ID=$(curl -s \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${AUTH_TOKEN}" \
+            "https://${API_ENDPOINT}/v1/projects/${PROJECT_ID}/locations/${LOCATION_ID}/publishers/google/models/${MODEL_ID}:predictLongRunning" \
+            -d @request.json | jq -r '.name')
+
+          echo "Polling for operation status..."
+          for i in {1..30}; do
+            RESPONSE=$(curl -s \
+              -X POST \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${AUTH_TOKEN}" \
+              "https://${API_ENDPOINT}/v1/projects/${PROJECT_ID}/locations/${LOCATION_ID}/publishers/google/models/${MODEL_ID}:fetchPredictOperation" \
+              -d "{\"operationName\":\"${OPERATION_ID}\"}")
+            if echo "$RESPONSE" | grep -q '"done": true'; then
+              echo "Generation complete!"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 10
+          done
+
+          echo "Extracting video URI..."
+          VIDEO_URI=$(echo "$RESPONSE" | jq -r '.response.videos[0].gcsUri')
+
+          if [[ -z "$VIDEO_URI" ]]; then
+            echo "No video found!"
+            echo "$RESPONSE"
+            exit 1
+          fi
+
+          echo "Downloading video..."
+          EPOCH=$(date +%s)
+          FILENAME="video_${EPOCH}.mp4"
+          gsutil cp "$VIDEO_URI" "$LOCAL_DIR/$FILENAME"
+          echo "Downloaded video to $LOCAL_DIR/$FILENAME"
+
+      - name: Upload video artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-video
+          path: ./videos/video_*.mp4
