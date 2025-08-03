@@ -5,7 +5,7 @@ HOUR=$(date -u +"%H")
 
 IMAGE=`ls output/*.png`
 AUDIO=`ls output/*.wav`
-OUTPUT="output/${HOUR}.mp4"
+OUTPUT="output/${HOUR}-${DATE}.mp4"
 DURATION=${1:-3600}
 
 if [ ! -f "$IMAGE" ]; then
