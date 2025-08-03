@@ -58,14 +58,22 @@ jobs:
           EOF
 
           echo "Requesting video generation..."
-          OPERATION_ID=$(curl -s \
+          RESPONSE_INIT=$(curl -s \
             -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${AUTH_TOKEN}" \
             "https://${API_ENDPOINT}/v1/projects/${PROJECT_ID}/locations/${LOCATION_ID}/publishers/google/models/${MODEL_ID}:predictLongRunning" \
-            -d @request.json | jq -r '.name')
-
-          echo "Polling for operation status..."
+            -d @request.json)
+          
+          OPERATION_ID=$(echo "$RESPONSE_INIT" | jq -r '.name // empty')
+          
+          if [[ -z "$OPERATION_ID" ]]; then
+            echo "❌ Failed to start operation. Response:"
+            echo "$RESPONSE_INIT"
+            exit 1
+          fi
+          
+          # Polling...
           for i in {1..30}; do
             RESPONSE=$(curl -s \
               -X POST \
@@ -73,28 +81,30 @@ jobs:
               -H "Authorization: Bearer ${AUTH_TOKEN}" \
               "https://${API_ENDPOINT}/v1/projects/${PROJECT_ID}/locations/${LOCATION_ID}/publishers/google/models/${MODEL_ID}:fetchPredictOperation" \
               -d "{\"operationName\":\"${OPERATION_ID}\"}")
-            if echo "$RESPONSE" | grep -q '"done": true'; then
-              echo "Generation complete!"
+          
+            echo "Polling attempt $i..."
+            if echo "$RESPONSE" | jq -e '.done == true' > /dev/null; then
+              echo "✅ Video generation completed!"
               break
             fi
-            echo "Waiting... ($i/30)"
             sleep 10
           done
-
-          echo "Extracting video URI..."
-          VIDEO_URI=$(echo "$RESPONSE" | jq -r '.response.videos[0].gcsUri')
-
+          
+          echo "Full operation response:"
+          echo "$RESPONSE" | jq
+          
+          VIDEO_URI=$(echo "$RESPONSE" | jq -r '.response.videos[0].gcsUri // empty')
+          
           if [[ -z "$VIDEO_URI" ]]; then
-            echo "No video found!"
-            echo "$RESPONSE"
+            echo "❌ No video URI found!"
             exit 1
           fi
-
-          echo "Downloading video..."
+          
+          echo "Downloading from: $VIDEO_URI"
           EPOCH=$(date +%s)
           FILENAME="video_${EPOCH}.mp4"
           gsutil cp "$VIDEO_URI" "$LOCAL_DIR/$FILENAME"
-          echo "Downloaded video to $LOCAL_DIR/$FILENAME"
+
 
       - name: Upload video artifact
         uses: actions/upload-artifact@v4
