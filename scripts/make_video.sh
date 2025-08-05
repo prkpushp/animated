@@ -2,10 +2,11 @@
 DATE=$(date +"%d%m%y")
 HOUR=$(date -u +"%H")
 
+EPOCH_TIME=$(date +%s)
 
 IMAGE=`ls output/*.png`
 AUDIO=`ls output/*.wav`
-OUTPUT="output/${HOUR}-${DATE}.mp4"
+OUTPUT="output/${EPOCH_TIME}.mp4"
 DURATION=${1:-3600}
 
 if [ ! -f "$IMAGE" ]; then
