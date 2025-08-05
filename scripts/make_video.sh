@@ -4,8 +4,8 @@ HOUR=$(date -u +"%H")
 
 EPOCH_TIME=$(date +%s)
 
-IMAGE=`ls output/*.png`
-AUDIO=`ls output/*.wav`
+IMAGE=$(ls -t output/*.png | head -n 1)
+AUDIO=$(ls -t output/*.wav | head -n 1)
 OUTPUT="output/${EPOCH_TIME}.mp4"
 DURATION=${1:-3600}
 
