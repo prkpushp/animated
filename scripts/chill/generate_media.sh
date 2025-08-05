@@ -74,3 +74,12 @@ else
     -d @request_music_retry.json \
     -o response_music_retry.json
 
+  AUDIO_B64=$(jq -r '.predictions[0].bytesBase64Encoded' response_music_retry.json)
+  if [ "$AUDIO_B64" != "null" ] && [ -n "$AUDIO_B64" ]; then
+    echo "$AUDIO_B64" | base64 -d > "output/music-$TIMESTAMP.wav"
+  else
+    echo "❌ Still failed."
+    cat response_music_retry.json
+    exit 1
+  fi
+fi
