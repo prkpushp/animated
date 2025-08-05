@@ -53,7 +53,7 @@ jobs:
         run: chmod +x scripts/chill/*.sh
 
       - name: Run 3x media generation loop
-        run: bash scripts/repeat_generate.sh "${{ inputs.prompt }}" "${{ steps.set_arg.outputs.arg }}"
+        run: bash scripts/chill/repeat_generate.sh "${{ inputs.prompt }}" "${{ steps.set_arg.outputs.arg }}"
 
       - name: Upload media artifact
         uses: actions/upload-artifact@v4
