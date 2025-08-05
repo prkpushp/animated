@@ -132,7 +132,7 @@ jobs:
             -o gemini_seo_response.json
 
           RAW_CONTENT=$(jq -r '.candidates[0].content.parts[0].text // .candidates[0].content.parts[0] // empty' gemini_seo_response.json)
-          echo "$RAW_CONTENT" > output/raw_content.txt
+          echo "$RAW_CONTENT" > output/raw_content01.txt
 
           SEO_JSON=$(echo "$RAW_CONTENT" | python3 -c "
           import sys, json, re
@@ -329,7 +329,7 @@ jobs:
             -o gemini_seo_response.json
 
           RAW_CONTENT=$(jq -r '.candidates[0].content.parts[0].text // .candidates[0].content.parts[0] // empty' gemini_seo_response.json)
-          echo "$RAW_CONTENT" > output/raw_content.txt
+          echo "$RAW_CONTENT" > output/raw_content02.txt
 
           SEO_JSON=$(echo "$RAW_CONTENT" | python3 -c "
           import sys, json, re
@@ -526,7 +526,7 @@ jobs:
             -o gemini_seo_response.json
 
           RAW_CONTENT=$(jq -r '.candidates[0].content.parts[0].text // .candidates[0].content.parts[0] // empty' gemini_seo_response.json)
-          echo "$RAW_CONTENT" > output/raw_content.txt
+          echo "$RAW_CONTENT" > output/raw_content03.txt
 
           SEO_JSON=$(echo "$RAW_CONTENT" | python3 -c "
           import sys, json, re
@@ -649,5 +649,5 @@ jobs:
           name: media-output99-${{ github.run_id }}-${{ github.run_number }}
           path: |
             output/
-            output/raw_content.txt
+            output/raw_content*
           retention-days: 7
