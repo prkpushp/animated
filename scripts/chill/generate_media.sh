@@ -6,6 +6,8 @@ TIMESTAMP=$(date +'%Y%m%d%H%M%S')
 ACCESS_TOKEN=$(gcloud auth print-access-token)
 IMAGE_PROMPT=$(cat output/image_prompt.txt)
 MUSIC_PROMPT=$(cat output/music_prompt.txt)
+PROJECT_ID=$(jq -r .project_id < "$GOOGLE_APPLICATION_CREDENTIALS")
+
 
 if [ -z "$IMAGE_PROMPT" ] || [ -z "$MUSIC_PROMPT" ]; then
   echo "❌ One of the prompts is empty. Aborting."
