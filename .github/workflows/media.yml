@@ -55,9 +55,10 @@ jobs:
       - name: Run 3x media generation loop
         run: bash scripts/repeat_generate.sh "${{ inputs.prompt }}" "${{ steps.set_arg.outputs.arg }}"
 
-      - name: Upload final output folder
+      - name: Upload media artifact
         uses: actions/upload-artifact@v4
         with:
-          name: final-output-folder
-          path: output/
+          name: media-output01-${{ github.run_id }}-${{ github.run_number }}
+          path: |
+            output/
           retention-days: 7
