@@ -9,8 +9,8 @@ for i in 900 3600 14400; do
   echo "🔁 Repetition $i of 3"
   echo "=============================="
 
-  bash chill/scripts/generate_prompts.sh "$PROMPT_INPUT"
-  bash chill/scripts/generate_media.sh
+  bash scripts/chill/generate_prompts.sh "$PROMPT_INPUT"
+  bash scripts/chill/generate_media.sh
   bash scripts/make_video.sh $i
   bash scripts/chill/upload_artifacts.sh
 done
