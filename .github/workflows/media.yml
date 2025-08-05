@@ -38,16 +38,6 @@ jobs:
         run: |
           echo "hour=$(date -u +'%H')" >> $GITHUB_OUTPUT
 
-      - name: Set argument based on UTC hour
-        id: set_arg
-        run: |
-          case "${{ steps.get_hour.outputs.hour }}" in
-            "00") echo "arg=900" >> $GITHUB_OUTPUT ;;
-            "01") echo "arg=" >> $GITHUB_OUTPUT ;;
-            "02") echo "arg=14400" >> $GITHUB_OUTPUT ;;
-            *) echo "arg=" >> $GITHUB_OUTPUT ;;
-          esac
-
       - name: Set up Google Cloud CLI
         uses: google-github-actions/setup-gcloud@v2
         with:
@@ -60,7 +50,7 @@ jobs:
           sudo apt-get install -y jq curl ffmpeg python3
 
       - name: Make scripts executable
-        run: chmod +x scripts/*.sh
+        run: chmod +x chill/scripts/*.sh
 
       - name: Run 3x media generation loop
         run: bash scripts/repeat_generate.sh "${{ inputs.prompt }}" "${{ steps.set_arg.outputs.arg }}"
