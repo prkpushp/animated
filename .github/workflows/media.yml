@@ -38,7 +38,9 @@ jobs:
 
       - name: Get current UTC hour
         id: get_hour
-        run: echo "hour=$(date -u +'%H')" >> $GITHUB_OUTPUT
+        run: |
+          date
+          echo "hour=$(date -u +'%H')" >> $GITHUB_OUTPUT
         
       - name: Set argument based on UTC hour
         id: set_arg
