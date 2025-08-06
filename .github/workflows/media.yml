@@ -149,7 +149,7 @@ jobs:
           else:
               print('{}')
           ")
-          echo "$SEO_JSON" > output/content.json
+          echo "$SEO_JSON" > output/content01.json
 
       - name: Generate image and music with Vertex AI
         id: generate-media01
@@ -346,7 +346,7 @@ jobs:
           else:
               print('{}')
           ")
-          echo "$SEO_JSON" > output/content.json
+          echo "$SEO_JSON" > output/content03.json
 
       - name: Generate image and music with Vertex AI
         id: generate-media02
@@ -543,7 +543,7 @@ jobs:
           else:
               print('{}')
           ")
-          echo "$SEO_JSON" > output/content.json
+          echo "$SEO_JSON" > output/content03.json
 
       - name: Generate image and music with Vertex AI
         id: generate-media03
