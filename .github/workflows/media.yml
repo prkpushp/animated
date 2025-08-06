@@ -9,8 +9,7 @@ on:
         type: string
   schedule:
     - cron: '00 0 * * *' # Runs every day at 5:30 AM IST (00:00 UTC)
-    - cron: '00 1 * * *' # 6:30 AM IST
-    - cron: '00 2 * * *' # 7:30 AM IST
+
 
 jobs:
   generate-media:
@@ -40,17 +39,7 @@ jobs:
         id: get_hour
         run: |
           date
-          echo "hour=$(date -u +'%H')" >> $GITHUB_OUTPUT
-        
-      - name: Set argument based on UTC hour
-        id: set_arg
-        run: |
-          case "${{ steps.get_hour.outputs.hour }}" in
-            "00") echo "arg=900" >> $GITHUB_OUTPUT ;;
-            "01") echo "arg=" >> $GITHUB_OUTPUT ;;
-            "02") echo "arg=14400" >> $GITHUB_OUTPUT ;;
-            *) echo "arg=" >> $GITHUB_OUTPUT ;;
-          esac          
+          echo "hour=$(date -u +'%H')" >> $GITHUB_OUTPUT      
 
       - name: Set up Google Cloud CLI
         uses: google-github-actions/setup-gcloud@v2
@@ -64,7 +53,7 @@ jobs:
           sudo apt-get install -y jq curl ffmpeg python3
 
       - name: Generate specialized prompts and SEO data with Gemini
-        id: gemini
+        id: gemini01
         run: |
           set -e
           mkdir -p output
@@ -143,7 +132,7 @@ jobs:
             -o gemini_seo_response.json
 
           RAW_CONTENT=$(jq -r '.candidates[0].content.parts[0].text // .candidates[0].content.parts[0] // empty' gemini_seo_response.json)
-          echo "$RAW_CONTENT" > output/raw_content.txt
+          echo "$RAW_CONTENT" > output/raw_content01.txt
 
           SEO_JSON=$(echo "$RAW_CONTENT" | python3 -c "
           import sys, json, re
@@ -160,17 +149,17 @@ jobs:
           else:
               print('{}')
           ")
-          echo "$SEO_JSON" > output/content.json
+          echo "$SEO_JSON" > output/content01.json
 
       - name: Generate image and music with Vertex AI
-        id: generate-media
+        id: generate-media01
         run: |
           set -e
           mkdir -p output
           TIMESTAMP=$(date +'%Y%m%d%H%M%S')
           ACCESS_TOKEN=$(gcloud auth print-access-token)
-          IMAGE_PROMPT="${{ steps.gemini.outputs.image_prompt }}"
-          MUSIC_PROMPT="${{ steps.gemini.outputs.music_prompt }}"
+          IMAGE_PROMPT="${{ steps.gemini01.outputs.image_prompt }}"
+          MUSIC_PROMPT="${{ steps.gemini01.outputs.music_prompt }}"
       
           if [ -z "$IMAGE_PROMPT" ] || [ -z "$MUSIC_PROMPT" ]; then
             echo "❌ One of the prompts is empty. Aborting."
@@ -250,7 +239,7 @@ jobs:
       - name: Upload image artifact
         uses: actions/upload-artifact@v4
         with:
-          name: media-output-${{ github.run_id }}-${{ github.run_number }}
+          name: media-output01-${{ github.run_id }}-${{ github.run_number }}
           path: |
             output/*.png
             output/*.wav
@@ -258,13 +247,407 @@ jobs:
 
 
       - name: 🛠️ Run Bash video script
-        run: bash scripts/make_video.sh ${{ steps.set_arg.outputs.arg }}
+        run: bash scripts/make_video.sh 900
+
+      - name: Generate specialized prompts and SEO data with Gemini
+        id: gemini02
+        run: |
+          set -e
+          mkdir -p output
+          PROMPT_INPUT="${{ inputs.prompt }}"
+
+          if [ -z "$PROMPT_INPUT" ]; then
+            PROMPT_INPUT="Generate one and only one tranquil, hyperrealistic natural scene in ultra-high resolution (16K HDR style), ultra green for meditation or relaxation, randomly chosen from a predefined list of peaceful environments (e.g., jungle waterfall, misty pine forest with cabin, mossy riverbank, alpine lake, enchanted fairytale house, serene Japanese garden, cherry blossom grove, snowy cottage, lavender field, canyon spring, or forest trail), using soft natural lighting like sunrise, sunset, or misty glow, emphasizing stillness, peace, and dreamlike serenity without combining multiple scene elements."
+          fi
+
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+          LOCATION="us-central1"
+          GEMINI_MODEL="gemini-2.0-flash-lite-001"
+
+          cat >gemini_prompt_request.json <<EOF
+          {
+            "contents": [
+              {
+                "role": "user",
+                "parts": [
+                  { "text": "Input: ${PROMPT_INPUT}\n\nCreate two creative prompts based on the above input, for:\n1. An image generation AI (describe visual scene, mood, details)\n2. A music generation AI (describe mood, instruments, style, tempo)\nFormat:\nImage Prompt: ...\nMusic Prompt: ..." }
+                ]
+              }
+            ]
+          }
+          EOF
+
+          curl -s -X POST \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${GEMINI_MODEL}:generateContent" \
+            -d @gemini_prompt_request.json \
+            -o gemini_prompts_response.json
+
+          HAS_PROMPT=$(jq '.candidates != null and .candidates[0].content.parts[0].text != null' gemini_prompts_response.json || echo "false")
+          if [ "$HAS_PROMPT" != "true" ]; then
+            GEN_PROMPTS_CONTENT=$(jq -r '.candidates[0].content.parts[0].text // .candidates[0].content.parts[0] // empty' gemini_prompts_response.json)
+          else
+            GEN_PROMPTS_CONTENT=$(jq -r '.candidates[0].content.parts[0].text' gemini_prompts_response.json)
+          fi
+
+          if [ -z "$GEN_PROMPTS_CONTENT" ]; then
+            IMAGE_PROMPT="$PROMPT_INPUT"
+            MUSIC_PROMPT="$PROMPT_INPUT"
+          else
+            IMAGE_PROMPT=$(echo "$GEN_PROMPTS_CONTENT" | grep -E '^Image Prompt:' | head -n1 | sed 's/^Image Prompt:[[:space:]]*//')
+            MUSIC_PROMPT=$(echo "$GEN_PROMPTS_CONTENT" | grep -E '^Music Prompt:' | head -n1 | sed 's/^Music Prompt:[[:space:]]*//')
+            if [ -z "$IMAGE_PROMPT" ]; then IMAGE_PROMPT="$PROMPT_INPUT"; fi
+            if [ -z "$MUSIC_PROMPT" ]; then MUSIC_PROMPT="$PROMPT_INPUT"; fi
+          fi
+
+          echo "image_prompt<<EOF" >> $GITHUB_OUTPUT
+          echo "$IMAGE_PROMPT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "music_prompt<<EOF" >> $GITHUB_OUTPUT
+          echo "$MUSIC_PROMPT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          cat >gemini_seo_request.json <<EOF
+          {
+            "contents": [
+              {
+                "role": "user",
+                "parts": [
+                  { "text": "Given this video concept: '${PROMPT_INPUT}', create a JSON object with three fields: 'title' (SEO-optimized YouTube video title), 'description' (SEO-optimized YouTube video description, at least 100 words, engaging, with keywords), and 'hashtags' (an array of 5-10 relevant SEO-optimized hashtags for YouTube, no # symbol, no spaces, just the tag text). Output ONLY the JSON object." }
+                ]
+              }
+            ]
+          }
+          EOF
+
+          curl -s -X POST \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${GEMINI_MODEL}:generateContent" \
+            -d @gemini_seo_request.json \
+            -o gemini_seo_response.json
+
+          RAW_CONTENT=$(jq -r '.candidates[0].content.parts[0].text // .candidates[0].content.parts[0] // empty' gemini_seo_response.json)
+          echo "$RAW_CONTENT" > output/raw_content02.txt
+
+          SEO_JSON=$(echo "$RAW_CONTENT" | python3 -c "
+          import sys, json, re
+          data = sys.stdin.read()
+          data = re.sub(r'```[a-zA-Z]*', '', data)
+          data = re.sub(r'```', '', data).strip()
+          m = re.search(r'(\{.*?\})', data, re.DOTALL)
+          if m:
+              try:
+                  obj = json.loads(m.group(1))
+                  print(json.dumps(obj, indent=2))
+              except Exception as e:
+                  print('{}')
+          else:
+              print('{}')
+          ")
+          echo "$SEO_JSON" > output/content03.json
+
+      - name: Generate image and music with Vertex AI
+        id: generate-media02
+        run: |
+          set -e
+          mkdir -p output
+          TIMESTAMP=$(date +'%Y%m%d%H%M%S')
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+          IMAGE_PROMPT="${{ steps.gemini02.outputs.image_prompt }}"
+          MUSIC_PROMPT="${{ steps.gemini02.outputs.music_prompt }}"
+      
+          if [ -z "$IMAGE_PROMPT" ] || [ -z "$MUSIC_PROMPT" ]; then
+            echo "❌ One of the prompts is empty. Aborting."
+            exit 1
+          fi
+      
+          echo "🖼 Generating image with prompt:"
+          echo "$IMAGE_PROMPT"
+      
+          jq -Rs --arg prompt "$IMAGE_PROMPT" '
+            {
+              instances: [ { prompt: $prompt } ],
+              parameters: { sampleCount: 1, aspectRatio: "16:9" }
+            }' <<< "" > request_image.json
+      
+          curl -s -X POST \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/us-central1/publishers/google/models/imagen-4.0-generate-preview-06-06:predict" \
+            -d @request_image.json \
+            -o response_image.json
+      
+          IMAGE_B64=$(jq -r '.predictions[0].bytesBase64Encoded' response_image.json)
+          if [ "$IMAGE_B64" != "null" ] && [ -n "$IMAGE_B64" ]; then
+            echo "$IMAGE_B64" | base64 -d > "output/image-$TIMESTAMP.png"
+          else
+            echo "❌ Image generation failed."
+            cat response_image.json
+            exit 1
+          fi
+      
+          echo "🎵 Generating music with prompt:"
+          echo "$MUSIC_PROMPT"
+      
+          jq -Rs --arg prompt "$MUSIC_PROMPT" '
+            {
+              instances: [ { prompt: $prompt } ],
+              parameters: { sampleCount: 1 }
+            }' <<< "" > request_music.json
+      
+          curl -s -X POST \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/us-central1/publishers/google/models/lyria-002:predict" \
+            -d @request_music.json \
+            -o response_music.json
+      
+          AUDIO_B64=$(jq -r '.predictions[0].bytesBase64Encoded' response_music.json)
+          if [ "$AUDIO_B64" != "null" ] && [ -n "$AUDIO_B64" ]; then
+            echo "$AUDIO_B64" | base64 -d > "output/music-$TIMESTAMP.wav"
+          else
+            echo "❌ Lyria rejected prompt. Retrying..."
+      
+            jq -Rs --arg prompt "A calming soundscape for deep sleep and relaxation, featuring soft ambient textures, gentle water sounds, and subtle Tibetan bowls in slow tempo." '
+              {
+                instances: [ { prompt: $prompt } ],
+                parameters: { sampleCount: 1 }
+              }' <<< "" > request_music_retry.json
+      
+            curl -s -X POST \
+              -H "Authorization: Bearer $ACCESS_TOKEN" \
+              -H "Content-Type: application/json" \
+              "https://us-central1-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/us-central1/publishers/google/models/lyria-002:predict" \
+              -d @request_music_retry.json \
+              -o response_music_retry.json
+      
+            AUDIO_B64=$(jq -r '.predictions[0].bytesBase64Encoded' response_music_retry.json)
+            if [ "$AUDIO_B64" != "null" ] && [ -n "$AUDIO_B64" ]; then
+              echo "$AUDIO_B64" | base64 -d > "output/music-$TIMESTAMP.wav"
+            else
+              echo "❌ Still failed."
+              cat response_music_retry.json
+              exit 1
+            fi
+          fi
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: media-output02-${{ github.run_id }}-${{ github.run_number }}
+          path: |
+            output/*.png
+            output/*.wav
+          retention-days: 7          
+
+
+      - name: 🛠️ Run Bash video script
+        run: bash scripts/make_video.sh 
+
+      - name: Generate specialized prompts and SEO data with Gemini
+        id: gemini03
+        run: |
+          set -e
+          mkdir -p output
+          PROMPT_INPUT="${{ inputs.prompt }}"
+
+          if [ -z "$PROMPT_INPUT" ]; then
+            PROMPT_INPUT="Generate one and only one tranquil, hyperrealistic natural scene in ultra-high resolution (16K HDR style), ultra green for meditation or relaxation, randomly chosen from a predefined list of peaceful environments (e.g., jungle waterfall, misty pine forest with cabin, mossy riverbank, alpine lake, enchanted fairytale house, serene Japanese garden, cherry blossom grove, snowy cottage, lavender field, canyon spring, or forest trail), using soft natural lighting like sunrise, sunset, or misty glow, emphasizing stillness, peace, and dreamlike serenity without combining multiple scene elements."
+          fi
+
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+          LOCATION="us-central1"
+          GEMINI_MODEL="gemini-2.0-flash-lite-001"
+
+          cat >gemini_prompt_request.json <<EOF
+          {
+            "contents": [
+              {
+                "role": "user",
+                "parts": [
+                  { "text": "Input: ${PROMPT_INPUT}\n\nCreate two creative prompts based on the above input, for:\n1. An image generation AI (describe visual scene, mood, details)\n2. A music generation AI (describe mood, instruments, style, tempo)\nFormat:\nImage Prompt: ...\nMusic Prompt: ..." }
+                ]
+              }
+            ]
+          }
+          EOF
+
+          curl -s -X POST \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${GEMINI_MODEL}:generateContent" \
+            -d @gemini_prompt_request.json \
+            -o gemini_prompts_response.json
+
+          HAS_PROMPT=$(jq '.candidates != null and .candidates[0].content.parts[0].text != null' gemini_prompts_response.json || echo "false")
+          if [ "$HAS_PROMPT" != "true" ]; then
+            GEN_PROMPTS_CONTENT=$(jq -r '.candidates[0].content.parts[0].text // .candidates[0].content.parts[0] // empty' gemini_prompts_response.json)
+          else
+            GEN_PROMPTS_CONTENT=$(jq -r '.candidates[0].content.parts[0].text' gemini_prompts_response.json)
+          fi
+
+          if [ -z "$GEN_PROMPTS_CONTENT" ]; then
+            IMAGE_PROMPT="$PROMPT_INPUT"
+            MUSIC_PROMPT="$PROMPT_INPUT"
+          else
+            IMAGE_PROMPT=$(echo "$GEN_PROMPTS_CONTENT" | grep -E '^Image Prompt:' | head -n1 | sed 's/^Image Prompt:[[:space:]]*//')
+            MUSIC_PROMPT=$(echo "$GEN_PROMPTS_CONTENT" | grep -E '^Music Prompt:' | head -n1 | sed 's/^Music Prompt:[[:space:]]*//')
+            if [ -z "$IMAGE_PROMPT" ]; then IMAGE_PROMPT="$PROMPT_INPUT"; fi
+            if [ -z "$MUSIC_PROMPT" ]; then MUSIC_PROMPT="$PROMPT_INPUT"; fi
+          fi
+
+          echo "image_prompt<<EOF" >> $GITHUB_OUTPUT
+          echo "$IMAGE_PROMPT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "music_prompt<<EOF" >> $GITHUB_OUTPUT
+          echo "$MUSIC_PROMPT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          cat >gemini_seo_request.json <<EOF
+          {
+            "contents": [
+              {
+                "role": "user",
+                "parts": [
+                  { "text": "Given this video concept: '${PROMPT_INPUT}', create a JSON object with three fields: 'title' (SEO-optimized YouTube video title), 'description' (SEO-optimized YouTube video description, at least 100 words, engaging, with keywords), and 'hashtags' (an array of 5-10 relevant SEO-optimized hashtags for YouTube, no # symbol, no spaces, just the tag text). Output ONLY the JSON object." }
+                ]
+              }
+            ]
+          }
+          EOF
+
+          curl -s -X POST \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${GEMINI_MODEL}:generateContent" \
+            -d @gemini_seo_request.json \
+            -o gemini_seo_response.json
+
+          RAW_CONTENT=$(jq -r '.candidates[0].content.parts[0].text // .candidates[0].content.parts[0] // empty' gemini_seo_response.json)
+          echo "$RAW_CONTENT" > output/raw_content03.txt
+
+          SEO_JSON=$(echo "$RAW_CONTENT" | python3 -c "
+          import sys, json, re
+          data = sys.stdin.read()
+          data = re.sub(r'```[a-zA-Z]*', '', data)
+          data = re.sub(r'```', '', data).strip()
+          m = re.search(r'(\{.*?\})', data, re.DOTALL)
+          if m:
+              try:
+                  obj = json.loads(m.group(1))
+                  print(json.dumps(obj, indent=2))
+              except Exception as e:
+                  print('{}')
+          else:
+              print('{}')
+          ")
+          echo "$SEO_JSON" > output/content03.json
+
+      - name: Generate image and music with Vertex AI
+        id: generate-media03
+        run: |
+          set -e
+          mkdir -p output
+          TIMESTAMP=$(date +'%Y%m%d%H%M%S')
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+          IMAGE_PROMPT="${{ steps.gemini03.outputs.image_prompt }}"
+          MUSIC_PROMPT="${{ steps.gemini03.outputs.music_prompt }}"
+      
+          if [ -z "$IMAGE_PROMPT" ] || [ -z "$MUSIC_PROMPT" ]; then
+            echo "❌ One of the prompts is empty. Aborting."
+            exit 1
+          fi
+      
+          echo "🖼 Generating image with prompt:"
+          echo "$IMAGE_PROMPT"
+      
+          jq -Rs --arg prompt "$IMAGE_PROMPT" '
+            {
+              instances: [ { prompt: $prompt } ],
+              parameters: { sampleCount: 1, aspectRatio: "16:9" }
+            }' <<< "" > request_image.json
+      
+          curl -s -X POST \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/us-central1/publishers/google/models/imagen-4.0-generate-preview-06-06:predict" \
+            -d @request_image.json \
+            -o response_image.json
+      
+          IMAGE_B64=$(jq -r '.predictions[0].bytesBase64Encoded' response_image.json)
+          if [ "$IMAGE_B64" != "null" ] && [ -n "$IMAGE_B64" ]; then
+            echo "$IMAGE_B64" | base64 -d > "output/image-$TIMESTAMP.png"
+          else
+            echo "❌ Image generation failed."
+            cat response_image.json
+            exit 1
+          fi
+      
+          echo "🎵 Generating music with prompt:"
+          echo "$MUSIC_PROMPT"
+      
+          jq -Rs --arg prompt "$MUSIC_PROMPT" '
+            {
+              instances: [ { prompt: $prompt } ],
+              parameters: { sampleCount: 1 }
+            }' <<< "" > request_music.json
+      
+          curl -s -X POST \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/us-central1/publishers/google/models/lyria-002:predict" \
+            -d @request_music.json \
+            -o response_music.json
+      
+          AUDIO_B64=$(jq -r '.predictions[0].bytesBase64Encoded' response_music.json)
+          if [ "$AUDIO_B64" != "null" ] && [ -n "$AUDIO_B64" ]; then
+            echo "$AUDIO_B64" | base64 -d > "output/music-$TIMESTAMP.wav"
+          else
+            echo "❌ Lyria rejected prompt. Retrying..."
+      
+            jq -Rs --arg prompt "A calming soundscape for deep sleep and relaxation, featuring soft ambient textures, gentle water sounds, and subtle Tibetan bowls in slow tempo." '
+              {
+                instances: [ { prompt: $prompt } ],
+                parameters: { sampleCount: 1 }
+              }' <<< "" > request_music_retry.json
+      
+            curl -s -X POST \
+              -H "Authorization: Bearer $ACCESS_TOKEN" \
+              -H "Content-Type: application/json" \
+              "https://us-central1-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/us-central1/publishers/google/models/lyria-002:predict" \
+              -d @request_music_retry.json \
+              -o response_music_retry.json
+      
+            AUDIO_B64=$(jq -r '.predictions[0].bytesBase64Encoded' response_music_retry.json)
+            if [ "$AUDIO_B64" != "null" ] && [ -n "$AUDIO_B64" ]; then
+              echo "$AUDIO_B64" | base64 -d > "output/music-$TIMESTAMP.wav"
+            else
+              echo "❌ Still failed."
+              cat response_music_retry.json
+              exit 1
+            fi
+          fi
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: media-output03-${{ github.run_id }}-${{ github.run_number }}
+          path: |
+            output/*.png
+            output/*.wav
+          retention-days: 7          
+
+
+      - name: 🛠️ Run Bash video script
+        run: bash scripts/make_video.sh 14400
 
       - name: Upload media artifact
         uses: actions/upload-artifact@v4
         with:
-          name: media-output01-${{ github.run_id }}-${{ github.run_number }}
+          name: media-output99-${{ github.run_id }}-${{ github.run_number }}
           path: |
             output/
-            output/raw_content.txt
+            output/raw_content*
           retention-days: 7
