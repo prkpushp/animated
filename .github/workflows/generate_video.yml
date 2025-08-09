@@ -1,4 +1,4 @@
-name: Generate zipzoom 
+`name: Generate zipzoom 
 
 on:
   schedule:
@@ -53,6 +53,8 @@ jobs:
             exit 1
           fi
           echo "Authentication successful"
+          export PROJECT_ID=$(jq -r .project_id < "${{ env.GOOGLE_APPLICATION_CREDENTIALS }}")
+          echo "PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
 
       # Install dependencies
       - name: Install dependencies
