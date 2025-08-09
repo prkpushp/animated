@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define project and model details
-PROJECT_ID="abiding-window-465512-p7"
+#PROJECT_ID="abiding-window-465512-p7"
 LOCATION_ID="us-central1"
 API_ENDPOINT="us-central1-aiplatform.googleapis.com"
 MODEL_ID="veo-2.0-generate-001"
