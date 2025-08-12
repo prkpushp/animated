@@ -181,8 +181,8 @@ if [ $? -eq 0 ]; then
     echo "Note: If required, attribute the music in your project (e.g., 'Music: Cartoon Battle by Doug Maxwell from YouTube Audio Library')"
     rm -f "${LOCAL_DIR}/${FILENAME}" # Remove original video without music
     # Delete video from bucket
-    echo "Deleting $VIDEO_URI from bucket..."
-    gsutil rm "$VIDEO_URI"
+    echo "Not Deleting $VIDEO_URI from bucket..."
+    #gsutil rm "$VIDEO_URI"
     if [ $? -eq 0 ]; then
       echo "Successfully deleted $VIDEO_URI from bucket"
     else
