@@ -117,7 +117,7 @@ jobs:
               {
                 "role": "user",
                 "parts": [
-                  { "text": "Given this video concept: '${PROMPT_INPUT}', create a JSON object with three fields: 'title' (SEO-optimized YouTube video title focusing Deep Sleep, insomnia, deep sleep, relaxation, ASMR, meditation, calm, mind relaxation, ocean waves, sleep waves, river, waterfall, natural bliss, recover quickly), 'description' (SEO-optimized YouTube video description, at least 100 words, engaging, with keywords), and 'hashtags' (an array of 15-20 relevant SEO-optimized hashtags for YouTube, no # symbol, no spaces, just the tag text). Output ONLY the JSON object." }
+                  { "text": "Given this video concept: '${PROMPT_INPUT}', create a JSON object with three fields: 'title' (SEO-optimized YouTube video title focusing Deep Sleep, insomnia, deep sleep, relaxation, ASMR, meditation, calm, mind relaxation, ocean waves, sleep waves, river, waterfall, natural bliss, recover quickly) but do not mention like 16K HDR, 'description' (SEO-optimized YouTube video description, at least 100 words, engaging, with keywords), and 'hashtags' (an array of 15-20 relevant SEO-optimized hashtags for YouTube, no # symbol, no spaces, just the tag text). Output ONLY the JSON object." }
                 ]
               }
             ]
