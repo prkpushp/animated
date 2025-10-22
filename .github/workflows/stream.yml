@@ -2,7 +2,7 @@ name: Streaming 4hr
 
 on:
   schedule:
-   # - cron: '30 3 * * *'  # Runs every 9:00 AM IST
+    - cron: '0 3 1 1 *'  # Runs once 1 year in Jan
   workflow_dispatch:     # Also allow manual trigger
 
 permissions:
