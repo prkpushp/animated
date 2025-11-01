@@ -30,10 +30,10 @@ echo "🎞️ Creating video directly with FFmpeg (no temp files)..."
 
 ffmpeg -y \
   -loop 1 -framerate 1 -t $DURATION -i "$IMAGE" \
-  -stream_loop 1000 -i "$AUDIO" \
+  -stream_loop -1 -i "$AUDIO" \
   -t $DURATION \
   -filter_complex "[0:v]fade=t=in:st=0:d=3,fade=t=out:st=$(($DURATION - 3)):d=3,format=yuv420p[v]; \
-                   [1:a]aloop=loop=-1:size=2e+09,afade=t=in:st=0:d=3,afade=t=out:st=$(($DURATION - 3)):d=3[a]" \
+                   [1:a]afade=t=in:st=0:d=3,afade=t=out:st=$(($DURATION - 3)):d=3[a]" \
   -map "[v]" -map "[a]" \
   -preset ultrafast -tune stillimage \
   -c:v libx264 -pix_fmt yuv420p \
