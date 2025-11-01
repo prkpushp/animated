@@ -1,7 +1,8 @@
 #!/bin/bash
+set -e
+
 DATE=$(date +"%d%m%y")
 HOUR=$(date -u +"%H")
-
 EPOCH_TIME=$(date +%s)
 
 IMAGE=$(ls -t output/*.png | head -n 1)
@@ -19,21 +20,25 @@ if [ ! -f "$AUDIO" ]; then
   exit 1
 fi
 
-echo "🎞️ Creating still background video..."
-ffmpeg -y -loop 1 -i "$IMAGE" -t $DURATION -vf "fade=t=in:st=0:d=3,fade=t=out:st=$(($DURATION - 3)):d=3,format=yuv420p" \
-  -c:v libx264 -pix_fmt yuv420p temp_video.mp4
+echo "🎞️ Creating video directly with FFmpeg (no temp files)..."
 
-echo "🎧 Looping and trimming audio..."
-ffmpeg -y -stream_loop 1000 -i "$AUDIO" -t $DURATION \
-  -af "afade=t=in:st=0:d=3,afade=t=out:st=$(($DURATION - 3)):d=3" \
-  -c:a aac -b:a 192k temp_audio.aac
+# Key optimizations:
+# 1. Avoid separate temp encodes — merge video/audio in one pass.
+# 2. Use -shortest only when needed.
+# 3. Use ultrafast preset & tune stillimage for static content.
+# 4. Use filter_complex for fade and looping inline.
 
-echo "🖊️ Merging with text overlay..."
-#ffmpeg -y -i temp_video.mp4 -i temp_audio.aac -filter_complex "[0:v]drawtext=text=' ':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=(h-text_h)/2" \
-  -c:v libx264 -c:a aac -shortest -pix_fmt yuv420p -movflags +faststart "$OUTPUT"
-ffmpeg -y -i temp_video.mp4 -i temp_audio.aac \
-  -c:v libx264 -c:a aac -shortest -pix_fmt yuv420p -movflags +faststart "$OUTPUT"
+ffmpeg -y \
+  -loop 1 -framerate 1 -t $DURATION -i "$IMAGE" \
+  -stream_loop 1000 -i "$AUDIO" \
+  -t $DURATION \
+  -filter_complex "[0:v]fade=t=in:st=0:d=3,fade=t=out:st=$(($DURATION - 3)):d=3,format=yuv420p[v]; \
+                   [1:a]aloop=loop=-1:size=2e+09,afade=t=in:st=0:d=3,afade=t=out:st=$(($DURATION - 3)):d=3[a]" \
+  -map "[v]" -map "[a]" \
+  -preset ultrafast -tune stillimage \
+  -c:v libx264 -pix_fmt yuv420p \
+  -c:a aac -b:a 192k \
+  -movflags +faststart \
+  "$OUTPUT"
 
-
-rm temp_video.mp4 temp_audio.aac
 echo "✅ Done! Video saved as: $OUTPUT"
