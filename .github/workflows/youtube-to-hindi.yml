@@ -24,12 +24,18 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y nodejs  # ← adds JS runtime
+        sudo apt-get install -y nodejs
         pip install -q yt-dlp openai-whisper torch transformers sentencepiece sacremoses
+
+    - name: Create cookies file from secret
+      run: |
+        echo "${{ secrets.YOUTUBE_COOKIES }}" > cookies.txt
+        echo "✅ Cookies file created."
 
     - name: Run transcription + translation
       env:
         YOUTUBE_URL: ${{ github.event.inputs.youtube_url }}
+        COOKIES_FILE: cookies.txt
       run: python scripts/transcribe_translate.py
 
     - name: Upload Hindi text as artifact
