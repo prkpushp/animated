@@ -1,4 +1,4 @@
-name: YouTube → Hindi Text
+name: YouTube → Hindi Transcript
 
 on:
   workflow_dispatch:
@@ -24,19 +24,19 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y nodejs ffmpeg  # 👈 add ffmpeg here
-        pip install -q yt-dlp openai-whisper torch transformers sentencepiece sacremoses
+        sudo apt-get install -y nodejs ffmpeg  # Needed for yt-dlp postprocessing
+        pip install -q yt-dlp openai-whisper torch
 
     - name: Create cookies file from secret
       run: |
         echo "${{ secrets.YOUTUBE_COOKIES }}" > cookies.txt
         echo "✅ Cookies file created."
 
-    - name: Run transcription + translation
+    - name: Run Hindi transcription
       env:
         YOUTUBE_URL: ${{ github.event.inputs.youtube_url }}
         COOKIES_FILE: cookies.txt
-      run: python scripts/transcribe_translate.py
+      run: python scripts/transcribe_hindi.py
 
     - name: Upload Hindi text as artifact
       uses: actions/upload-artifact@v4
