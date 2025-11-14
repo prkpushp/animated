@@ -7,7 +7,15 @@ AUDIO_FILE = "audio.m4a"
 OUTPUT_FILE = "hindi_output.txt"
 
 def download_audio(url, out):
-    subprocess.run(["yt-dlp", "-x", "--audio-format", "m4a", "-o", out, url], check=True)
+    # use simpler player client to avoid sign-in blocks
+    cmd = [
+        "yt-dlp",
+        "-x", "--audio-format", "m4a",
+        "--extractor-args", "youtube:player_client=default",
+        "-o", out,
+        url
+    ]
+    subprocess.run(cmd, check=True)
 
 def translate(text, tok, model, max_chars=1500):
     parts, cur, count = [], [], 0
@@ -25,15 +33,15 @@ def translate(text, tok, model, max_chars=1500):
     return "\n".join(out)
 
 def main():
-    print("Downloading audio…")
+    print(f"🎬 Downloading audio from: {YOUTUBE_URL}")
     download_audio(YOUTUBE_URL, AUDIO_FILE)
 
-    print("Transcribing audio with Whisper…")
+    print("🧠 Transcribing audio with Whisper…")
     model = whisper.load_model("small")
     result = model.transcribe(AUDIO_FILE, language="en")
     english_text = result["text"].strip()
 
-    print("Translating to Hindi…")
+    print("🌐 Translating English → Hindi…")
     tok = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-hi")
     mdl = AutoModelForSeq2SeqLM.from_pretrained("Helsinki-NLP/opus-mt-en-hi")
     hindi_text = translate(english_text, tok, mdl)
