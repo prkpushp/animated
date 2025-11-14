@@ -1,10 +1,10 @@
-name: YouTube → Hindi Transcript
+name: YouTube → Hindi Transcript (Public)
 
 on:
   workflow_dispatch:
     inputs:
       youtube_url:
-        description: 'YouTube video URL'
+        description: 'Public YouTube video URL'
         required: true
         default: 'https://www.youtube.com/watch?v=8SRe1bNO38E'
 
@@ -24,18 +24,12 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y nodejs ffmpeg  # Needed for yt-dlp postprocessing
-        pip install -q yt-dlp openai-whisper torch
-
-    - name: Create cookies file from secret
-      run: |
-        echo "${{ secrets.YOUTUBE_COOKIES }}" > cookies.txt
-        echo "✅ Cookies file created."
+        sudo apt-get install -y ffmpeg  # needed for Whisper audio handling
+        pip install -q pytube openai-whisper torch
 
     - name: Run Hindi transcription
       env:
         YOUTUBE_URL: ${{ github.event.inputs.youtube_url }}
-        COOKIES_FILE: cookies.txt
       run: python scripts/transcribe_hindi.py
 
     - name: Upload Hindi text as artifact
