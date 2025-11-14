@@ -26,6 +26,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y ffmpeg  # needed for Whisper audio handling
         pip install -q pytube openai-whisper torch
+        pip install -U git+https://github.com/pytube/pytube
 
     - name: Run Hindi transcription
       env:
