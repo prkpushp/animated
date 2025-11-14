@@ -27,24 +27,38 @@ def download_audio(url, out):
     subprocess.run(cmd, check=True)
 
 
-def translate(text, tok, model, max_chars=1500):
-    parts, cur, count = [], [], 0
-    for para in re.split(r'(\n\n+)', text):
-        if count + len(para) > max_chars and cur:
-            parts.append("".join(cur))
-            cur = []
-            count = 0
-        cur.append(para)
-        count += len(para)
-    if cur:
-        parts.append("".join(cur))
+def translate(text, tok, model, max_tokens=512):
+    """
+    Splits text into smaller chunks that the Marian model can handle.
+    Handles large transcripts safely on CPU runners.
+    """
+    import math
 
-    out = []
-    for chunk in parts:
-        inputs = tok(chunk, return_tensors="pt", truncation=True, max_length=1024)
-        ids = model.generate(**inputs, max_length=1024)
-        out.append(tok.decode(ids[0], skip_special_tokens=True))
-    return "\n".join(out)
+    # Split into sentences or paragraphs to avoid mid-word breaks
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    out_chunks = []
+    buffer = ""
+
+    for sent in sentences:
+        # check token length before adding
+        tokens = tok(buffer + " " + sent, return_tensors="pt", truncation=False).input_ids
+        if tokens.shape[1] > max_tokens:
+            if buffer.strip():
+                inputs = tok(buffer.strip(), return_tensors="pt", truncation=True, max_length=max_tokens)
+                ids = model.generate(**inputs, max_length=max_tokens)
+                out_chunks.append(tok.decode(ids[0], skip_special_tokens=True))
+            buffer = sent
+        else:
+            buffer += " " + sent
+
+    # translate any remainder
+    if buffer.strip():
+        inputs = tok(buffer.strip(), return_tensors="pt", truncation=True, max_length=max_tokens)
+        ids = model.generate(**inputs, max_length=max_tokens)
+        out_chunks.append(tok.decode(ids[0], skip_special_tokens=True))
+
+    return "\n".join(out_chunks)
+
 
 
 def main():
