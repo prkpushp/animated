@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       youtube_url:
-        description: "Public YouTube video URL"
+        description: "YouTube URL"
         required: true
         default: "https://www.youtube.com/watch?v=8SRe1bNO38E"
 
@@ -13,44 +13,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
-      - name: Upgrade pip
-        run: |
-          python -m pip install --upgrade pip
-
       - name: Install dependencies
         run: |
-          pip uninstall -y youtube_transcript_api || true
-          pip uninstall -y youtube-transcript-api || true
-          pip install --no-cache-dir youtube-transcript-api==0.6.2
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          pip install -U https://github.com/yt-dlp/yt-dlp/archive/master.zip
-          pip install openai-whisper torch
+          pip install requests
 
-
-      # Optional: Debug import path (keep this ON for first test)
-      - name: Debug python import path
-        run: |
-          python - << 'EOF'
-          import youtube_transcript_api, inspect
-          print("Imported from:", inspect.getfile(youtube_transcript_api))
-          EOF
-
-      - name: Run Hindi transcription
+      - name: Run everything.ai transcript
         env:
           YOUTUBE_URL: ${{ github.event.inputs.youtube_url }}
         run: python scripts/transcribe.py
 
-      - name: Upload Hindi text as artifact
+      - name: Upload transcript
         uses: actions/upload-artifact@v4
         with:
-          name: hindi_text
+          name: transcript
           path: hindi_output.txt
