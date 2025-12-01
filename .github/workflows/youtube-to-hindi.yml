@@ -31,8 +31,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          pip install youtube-transcript-api
+          pip install --upgrade youtube-transcript-api
+
 
 
       - name: Run Hindi transcription
