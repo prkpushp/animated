@@ -25,15 +25,23 @@ def download_audio(url):
         ],
         "quiet": False,
         "no_warnings": True,
-
-        # 🔥 BYPASS YOUTUBE BOT DETECTION
+    
+        # ---------------------------------------------------
+        # 🔥 ANTI-BOT + ANTI-INNERTUBE + ANTI-INITIAL-DATA FIX
+        # ---------------------------------------------------
         "extractor_args": {
             "youtube": {
-                "player_client": ["android"],   # uses Android client instead of web
-                "player_skip": ["webpage"],      # skips anti-bot webpage challenge
+                "player_client": ["android"],
+                "player_skip": ["webpage"],
+                "no_initial_data": True,      # <--- IMPORTANT
+                "no_check_formats": True,     # more lenient
             }
         },
+    
+        # Force Innertube fallback (web client API with Key)
+        "youtube_include_dash_manifest": False,
     }
+
 
     # 🔥 Add cookies if available
     if os.path.exists(COOKIES_FILE):
