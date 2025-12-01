@@ -1,95 +1,48 @@
 import os
 import sys
-import whisper
-import yt_dlp
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
+import re
 
-YOUTUBE_URL = os.getenv("YOUTUBE_URL")
-AUDIO_BASE_NAME = "audio"
-AUDIO_FILE = f"{AUDIO_BASE_NAME}.mp3"
 OUTPUT_FILE = "hindi_output.txt"
-COOKIES_FILE = "cookies.txt"
 
-
-def download_audio(url):
-    print(f"🎬 Downloading audio from: {url}")
-
-    ydl_opts = {
-        "format": "bestaudio/best",
-        "outtmpl": AUDIO_BASE_NAME,
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "192",
-            }
-        ],
-        "quiet": False,
-        "no_warnings": True,
-
-        # ------------------------------------------------------
-        # 🔥 2025: Working YouTube anti-bot + anti-initial-data fix
-        # ------------------------------------------------------
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["android", "android_vr"],
-                "skip": ["webpage", "dash", "configs"],   # <-- IMPORTANT
-                "no_initial_data": "true",                # <-- IMPORTANT
-                "retry_download": 3,
-            }
-        },
-
-        # Force innertube API instead of webpage
-        "force_innertube": True,
-        "extract_flat": False,
-        "youtube_include_dash_manifest": False,
-    }
-
-    # Use cookies if available
-    if os.path.exists(COOKIES_FILE):
-        print("🍪 Using cookies.txt for YouTube authentication.")
-        ydl_opts["cookiefile"] = COOKIES_FILE
-    else:
-        print("⚠️ No cookies.txt found. Proceeding without authentication.")
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        print(f"✅ Audio downloaded successfully: {AUDIO_FILE}")
-        return True
-    except Exception as e:
-        print(f"❌ Error downloading audio: {e}")
-        return False
-
+def extract_video_id(url):
+    match = re.search(r"v=([a-zA-Z0-9_-]{11})", url)
+    return match.group(1) if match else None
 
 def main():
-    if not YOUTUBE_URL:
-        print("❌ Error: YOUTUBE_URL environment variable is not set.")
+    youtube_url = os.getenv("YOUTUBE_URL")
+    if not youtube_url:
+        print("❌ Error: YOUTUBE_URL is not set.")
         sys.exit(1)
 
-    # Download audio
-    if not download_audio(YOUTUBE_URL):
+    video_id = extract_video_id(youtube_url)
+    if not video_id:
+        print("❌ Unable to extract video ID.")
         sys.exit(1)
 
-    print("🧠 Transcribing Hindi audio -> text... (CPU may take time)")
+    print(f"📌 Extracted Video ID: {video_id}")
+    print("📥 Fetching YouTube transcript (Hindi preferred)…")
 
     try:
-        model = whisper.load_model("small")
+        # Try Hindi first
+        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['hi', 'hi-IN'])
 
-        if not os.path.exists(AUDIO_FILE):
-            print(f"❌ Error: Audio file {AUDIO_FILE} not found.")
-            sys.exit(1)
-
-        result = model.transcribe(AUDIO_FILE, language="hi")
-        hindi_text = result["text"].strip()
-
-        with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-            f.write(hindi_text)
-
-        print(f"✅ Saved Hindi transcript → {OUTPUT_FILE}")
+    except TranscriptsDisabled:
+        print("❌ This video has no transcripts enabled.")
+        sys.exit(1)
 
     except Exception as e:
-        print(f"❌ Error during transcription: {e}")
+        print(f"❌ Error fetching transcript: {e}")
         sys.exit(1)
+
+    # Combine transcript text
+    hindi_text = " ".join(item['text'] for item in transcript_list)
+
+    # Save
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+        f.write(hindi_text)
+
+    print(f"✅ Saved Hindi transcript → {OUTPUT_FILE}")
 
 
 if __name__ == "__main__":
