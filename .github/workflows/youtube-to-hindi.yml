@@ -1,4 +1,4 @@
-name: YouTube → Hindi Transcript (Public)
+name: YouTube → Hindi Transcript
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ on:
 jobs:
   transcribe:
     runs-on: ubuntu-latest
-
+    
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
@@ -24,14 +24,14 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y ffmpeg  # needed for Whisper audio handling
-        pip install -q pytube openai-whisper torch
-        pip install -U git+https://github.com/pytube/pytube
+        sudo apt-get install -y ffmpeg
+        # Install yt-dlp for downloading and openai-whisper for transcribing
+        pip install -q yt-dlp openai-whisper torch
 
     - name: Run Hindi transcription
       env:
         YOUTUBE_URL: ${{ github.event.inputs.youtube_url }}
-      run: python scripts/transcribe_hindi.py
+      run: python scripts/transcribe.py
 
     - name: Upload Hindi text as artifact
       uses: actions/upload-artifact@v4
