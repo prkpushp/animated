@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -21,19 +21,23 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Create Cookies File (if provided)
-        env:
-          COOKIE_SECRET: ${{ secrets.YOUTUBE_COOKIES }}
-        if: ${{ env.COOKIE_SECRET != '' }}
+      - name: Upgrade pip
         run: |
-          echo "$COOKIE_SECRET" > cookies.txt
-          echo "🍪 Cookies file created."
+          python -m pip install --upgrade pip
 
-      - name: Install dependencies
+      - name: Install youtube-transcript-api (clean install)
         run: |
-          pip install --upgrade youtube-transcript-api
+          pip uninstall -y youtube_transcript_api || true
+          pip uninstall -y youtube-transcript-api || true
+          pip install --no-cache-dir youtube-transcript-api==0.6.2
 
-
+      # Optional: Debug import path (keep this ON for first test)
+      - name: Debug python import path
+        run: |
+          python - << 'EOF'
+          import youtube_transcript_api, inspect
+          print("Imported from:", inspect.getfile(youtube_transcript_api))
+          EOF
 
       - name: Run Hindi transcription
         env:
