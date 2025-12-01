@@ -30,6 +30,8 @@ def download_audio(url):
     if os.path.exists(COOKIES_FILE):
         print(f"🍪 Found {COOKIES_FILE}, using for authentication.")
         ydl_opts['cookiefile'] = COOKIES_FILE
+    else:
+        print(f"⚠️ {COOKIES_FILE} not found. Proceeding without authentication (may fail for some videos).")
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
