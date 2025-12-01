@@ -1,7 +1,7 @@
 import os
 import sys
 import re
-from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound, CouldNotRetrieveTranscript
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 
 OUTPUT_FILE = "hindi_output.txt"
 
@@ -18,49 +18,47 @@ def main():
 
     video_id = extract_video_id(youtube_url)
     if not video_id:
-        print("❌ Unable to extract video ID from the URL.")
+        print("❌ Could not extract video ID from URL.")
         sys.exit(1)
 
     print(f"📌 Extracted Video ID: {video_id}")
     print("📥 Fetching transcript (Hindi preferred)…")
 
+    transcript_data = None
+
     try:
-        transcripts = YouTubeTranscriptApi.list_transcripts(video_id)
-
-        # 1️⃣ Try Hindi transcript
+        # Try Hindi first (works across ALL versions)
         try:
-            transcript = transcripts.find_transcript(['hi', 'hi-IN'])
+            transcript_data = YouTubeTranscriptApi.get_transcript(
+                video_id, languages=['hi', 'hi-IN']
+            )
             print("✅ Found Hindi transcript")
+
         except NoTranscriptFound:
-            print("⚠️ No Hindi transcript found, trying auto-generated captions")
+            print("⚠️ No Hindi transcript. Trying auto-generated English…")
 
-            # 2️⃣ Try auto-generated (usually available)
             try:
-                transcript = transcripts.find_manually_created_transcript(['en'])
-                print("⚠️ Found English transcript (manual)")
-            except:
-                transcript = transcripts.find_generated_transcript(['en'])
-                print("⚡ Using auto-generated English transcript")
-
-        # Fetch the transcript lines
-        text_items = transcript.fetch()
+                transcript_data = YouTubeTranscriptApi.get_transcript(
+                    video_id, languages=['en']
+                )
+                print("⚡ Found English auto transcript")
+            except Exception:
+                print("❌ No transcripts available at all.")
+                sys.exit(1)
 
     except TranscriptsDisabled:
-        print("❌ This video has no transcripts enabled.")
-        sys.exit(1)
-    except CouldNotRetrieveTranscript:
-        print("❌ YouTube blocked transcript retrieval.")
+        print("❌ Transcripts disabled for this video.")
         sys.exit(1)
     except Exception as e:
         print(f"❌ Error fetching transcript: {e}")
         sys.exit(1)
 
-    # Combine all text
-    full_text = " ".join(t["text"] for t in text_items)
+    # Combine text from transcript
+    final_text = " ".join(entry["text"] for entry in transcript_data)
 
     # Save output
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-        f.write(full_text)
+        f.write(final_text)
 
     print(f"✅ Saved transcript → {OUTPUT_FILE}")
 
