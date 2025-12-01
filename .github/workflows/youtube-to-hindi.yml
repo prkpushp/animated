@@ -22,7 +22,7 @@ jobs:
         python-version: '3.10'
 
     - name: Create Cookies File
-      if: ${{ secrets.YOUTUBE_COOKIES != '' }}
+      if: ${{ secrets.YOUTUBE_COOKIES }}
       env:
         COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
       run: |
@@ -33,7 +33,6 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y ffmpeg
-        # Install latest yt-dlp from master to get newest fixes
         pip install -U https://github.com/yt-dlp/yt-dlp/archive/master.zip
         pip install -q openai-whisper torch
 
