@@ -25,25 +25,26 @@ def download_audio(url):
         ],
         "quiet": False,
         "no_warnings": True,
-    
-        # ---------------------------------------------------
-        # 🔥 ANTI-BOT + ANTI-INNERTUBE + ANTI-INITIAL-DATA FIX
-        # ---------------------------------------------------
+
+        # ------------------------------------------------------
+        # 🔥 2025: Working YouTube anti-bot + anti-initial-data fix
+        # ------------------------------------------------------
         "extractor_args": {
             "youtube": {
-                "player_client": ["android"],
-                "player_skip": ["webpage"],
-                "no_initial_data": True,      # <--- IMPORTANT
-                "no_check_formats": True,     # more lenient
+                "player_client": ["android", "android_vr"],
+                "skip": ["webpage", "dash", "configs"],   # <-- IMPORTANT
+                "no_initial_data": "true",                # <-- IMPORTANT
+                "retry_download": 3,
             }
         },
-    
-        # Force Innertube fallback (web client API with Key)
+
+        # Force innertube API instead of webpage
+        "force_innertube": True,
+        "extract_flat": False,
         "youtube_include_dash_manifest": False,
     }
 
-
-    # 🔥 Add cookies if available
+    # Use cookies if available
     if os.path.exists(COOKIES_FILE):
         print("🍪 Using cookies.txt for YouTube authentication.")
         ydl_opts["cookiefile"] = COOKIES_FILE
