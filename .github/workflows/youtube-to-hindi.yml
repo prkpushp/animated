@@ -25,11 +25,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
 
-      - name: Install youtube-transcript-api (clean install)
+      - name: Install dependencies
         run: |
           pip uninstall -y youtube_transcript_api || true
           pip uninstall -y youtube-transcript-api || true
           pip install --no-cache-dir youtube-transcript-api==0.6.2
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          pip install -U https://github.com/yt-dlp/yt-dlp/archive/master.zip
+          pip install openai-whisper torch
+
 
       # Optional: Debug import path (keep this ON for first test)
       - name: Debug python import path
