@@ -22,27 +22,5 @@ jobs:
         python-version: '3.10'
 
     - name: Create Cookies File
-      if: ${{ secrets.YOUTUBE_COOKIES }}
       env:
-        COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
-      run: |
-        echo "$COOKIES" > cookies.txt
-        echo "🍪 Cookies file created."
-
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y ffmpeg
-        pip install -U https://github.com/yt-dlp/yt-dlp/archive/master.zip
-        pip install -q openai-whisper torch
-
-    - name: Run Hindi transcription
-      env:
-        YOUTUBE_URL: ${{ github.event.inputs.youtube_url }}
-      run: python scripts/transcribe.py
-
-    - name: Upload Hindi text as artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: hindi_text
-        path: hindi_output.txt
+        COOKIE_SECRET: ${{ secrets.YOUTUBE_
