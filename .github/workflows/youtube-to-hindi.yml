@@ -1,4 +1,4 @@
-name: YouTube → Hindi Transcript
+name: YouTube Hindi Transcript
 
 on:
   workflow_dispatch:
