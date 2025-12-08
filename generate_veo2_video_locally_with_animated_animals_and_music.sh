@@ -82,25 +82,27 @@ echo "Generated prompt: $PROMPT"
 echo "Output filename: ${LOCAL_DIR}/${SANITIZED_PROMPT}.mp4"
 
 # Create request.json for video generation
-cat << EOF > request.json
-{
-  "instances": [
-    {
-      "prompt": "${PROMPT}"
+jq -n \
+  --arg prompt "$PROMPT" \
+  --arg storage "$STORAGE_URI" \
+  '{
+    instances: [
+      {
+        prompt: $prompt
+      }
+    ],
+    parameters: {
+      aspectRatio: "9:16",
+      sampleCount: 1,
+      durationSeconds: "8",
+      personGeneration: "allow_adult",
+      enablePromptRewriting: true,
+      addWatermark: true,
+      includeRaiReason: true,
+      storageUri: $storage
     }
-  ],
-  "parameters": {
-    "aspectRatio": "9:16",
-    "sampleCount": 1,
-    "durationSeconds": "8",
-    "personGeneration": "allow_adult",
-    "enablePromptRewriting": true,
-    "addWatermark": true,
-    "includeRaiReason": true,
-    "storageUri": "${STORAGE_URI}"
-  }
-}
-EOF
+  }' > request.json
+
 
 # Start video generation and get operation ID
 echo "Initiating video generation with Veo 2.0..."
