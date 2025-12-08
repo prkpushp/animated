@@ -104,12 +104,45 @@ EOF
 
 # Start video generation and get operation ID
 echo "Initiating video generation with Veo 2.0..."
-OPERATION_ID=$(curl -s \
-  -X POST \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-  "https://${API_ENDPOINT}/v1/projects/${PROJECT_ID}/locations/${LOCATION_ID}/publishers/google/models/${MODEL_ID}:predictLongRunning" \
-  -d '@request.json' | sed -n 's/.*"name": "\(.*\)".*/\1/p')
+echo "Initiating video generation with Veo 2.0..."
+
+MAX_RETRIES=3
+RETRY_DELAY=5
+OPERATION_ID=""
+
+for ((i=1; i<=MAX_RETRIES; i++)); do
+  echo "▶ Attempt $i/$MAX_RETRIES to start generation..."
+
+  RESPONSE=$(curl -s \
+    -X POST \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+    "https://${API_ENDPOINT}/v1/projects/${PROJECT_ID}/locations/${LOCATION_ID}/publishers/google/models/${MODEL_ID}:predictLongRunning" \
+    -d '@request.json')
+
+  OPERATION_ID=$(echo "$RESPONSE" | sed -n 's/.*"name": "\(.*\)".*/\1/p')
+
+  if [ -n "$OPERATION_ID" ]; then
+    echo "✅ OPERATION_ID received:"
+    echo "$OPERATION_ID"
+    break
+  fi
+
+  echo "⚠ Failed to get OPERATION_ID (attempt $i)."
+  echo "Response was:"
+  echo "$RESPONSE"
+
+  if [ "$i" -lt "$MAX_RETRIES" ]; then
+    echo "⏳ Retrying in ${RETRY_DELAY}s..."
+    sleep "$RETRY_DELAY"
+  fi
+done
+
+if [ -z "$OPERATION_ID" ]; then
+  echo "❌ Error: Failed to get OPERATION_ID after $MAX_RETRIES attempts."
+  rm -f request.json
+  exit 1
+fi
 
 if [ -z "$OPERATION_ID" ]; then
   echo "Error: Failed to get OPERATION_ID. Check authentication or API access."
