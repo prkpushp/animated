@@ -28,7 +28,7 @@ cat <<EOF > request.json
       "role": "user",
       "parts": [
         {
-          "text": "Generate a single, self-contained creative prompt for a Veo 2 video in the style of a Disney-Pixar 3D animated cartoon of either cat or dog or both. The prompt should consist of two distinct scenes within a total duration of 8 seconds. Clearly indicate the transition from the first scene to the second. The scenes should be short, funny, cute, emotionally engaging, and visually rich, with characters or actions that create an immediate emotional connection or visual intrigue. Each scene should be powerful enough to capture audience attention instantly, even with minimal duration. Return only the prompt text — no explanation, no bullet points, and no formatting."
+          "text": "Generate a highly realistic, single, self-contained creative prompt for a Veo 2 video in the style of a Disney-Pixar 3D animated cartoon of either cat or dog or both. The prompt should consist of two distinct scenes within a total duration of 8 seconds. Clearly indicate the transition from the first scene to the second. The scenes should be short, funny, cute, emotionally engaging, and visually rich, with characters or actions that create an immediate emotional connection or visual intrigue. Each scene should be powerful enough to capture audience attention instantly, even with minimal duration. Return only the prompt text — no explanation, no bullet points, and no formatting."
         }
       ]
     }
