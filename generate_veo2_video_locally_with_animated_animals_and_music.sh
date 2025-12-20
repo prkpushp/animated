@@ -209,12 +209,12 @@ echo "Downloading $VIDEO_URI to ${LOCAL_DIR}/${FILENAME}"
 gsutil cp "$VIDEO_URI" "${LOCAL_DIR}/${FILENAME}"
 if [ $? -eq 0 ]; then
   echo "Successfully downloaded $FILENAME"
-  echo "Adding music from $AUDIO_FILE to $FILENAME..."
-  ffmpeg -i "${LOCAL_DIR}/${FILENAME}" -i "$AUDIO_FILE" -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 -shortest -y "$OUTPUT_FILENAME"
+  #echo "Adding music from $AUDIO_FILE to $FILENAME..."
+  #ffmpeg -i "${LOCAL_DIR}/${FILENAME}" -i "$AUDIO_FILE" -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 -shortest -y "$OUTPUT_FILENAME"
   if [ $? -eq 0 ]; then
     echo "Successfully created $OUTPUT_FILENAME with music"
     echo "Note: If required, attribute the music in your project (e.g., 'Music: Cartoon Battle by Doug Maxwell from YouTube Audio Library')"
-    rm -f "${LOCAL_DIR}/${FILENAME}" # Remove original video without music
+    #rm -f "${LOCAL_DIR}/${FILENAME}" # Remove original video without music
     # Delete video from bucket
     echo "Not Deleting $VIDEO_URI from bucket..."
     #gsutil rm "$VIDEO_URI"
