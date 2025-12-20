@@ -61,7 +61,7 @@ jobs:
           PROMPT_INPUT="${{ inputs.prompt }}"
 
           if [ -z "$PROMPT_INPUT" ]; then
-            PROMPT_INPUT="Generate one and only one tranquil, hyperrealistic natural scene in ultra-high resolution (16K HDR style), ultra green for meditation or relaxation, randomly chosen from a predefined list of peaceful environments (e.g.,only one of jungle waterfall, misty pine forest with cabin, mossy riverbank, alpine lake, enchanted fairytale house, serene Japanese garden, cherry blossom grove, snowy cottage, lavender field, canyon spring, or forest trail), using soft natural lighting like sunrise, sunset, or misty glow, emphasizing stillness, peace, and dreamlike serenity without combining multiple scene elements."
+            PROMPT_INPUT="Generate a single, breath-taking hyperrealistic natural scene in 8K cinematic HDR. Focus on a vibrant, high-contrast palette—deep emeralds, golden ambers, and iridescent highlights. Choose one environment of your choice. Incorporate dynamic volumetric lighting (God rays) piercing through the canopy or mist. Emphasize subtle motion: shimmering water surfaces, floating dust motes in light beams, or wind-swept foliage. The scene should feel lush and energetic yet deeply soulful, utilizing a wide color gamut to create a vivid, dreamlike atmosphere."
           fi
 
           ACCESS_TOKEN=$(gcloud auth print-access-token)
