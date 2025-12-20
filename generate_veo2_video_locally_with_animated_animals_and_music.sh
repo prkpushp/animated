@@ -4,7 +4,7 @@
 #PROJECT_ID="abiding-window-465512-p7"
 LOCATION_ID="us-central1"
 API_ENDPOINT="us-central1-aiplatform.googleapis.com"
-MODEL_ID="veo-2.0-generate-001"
+MODEL_ID="veo-3.1-fast-generate-001"   #Earlier veo-2.0-generate-001
 STORAGE_URI="gs://helloranjan1/output/"
 AUDIO_FILE=`ls *.mp3| shuf | head -n 1`
 LOCAL_DIR="./videos"
