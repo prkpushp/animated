@@ -211,20 +211,12 @@ if [ $? -eq 0 ]; then
   echo "Successfully downloaded $FILENAME"
   #echo "Adding music from $AUDIO_FILE to $FILENAME..."
   #ffmpeg -i "${LOCAL_DIR}/${FILENAME}" -i "$AUDIO_FILE" -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 -shortest -y "$OUTPUT_FILENAME"
+  #rename file to title/description specific
+  mv "${LOCAL_DIR}/${FILENAME}" "$OUTPUT_FILENAME"
   if [ $? -eq 0 ]; then
-    echo "Successfully created $OUTPUT_FILENAME with music"
-    echo "Note: If required, attribute the music in your project (e.g., 'Music: Cartoon Battle by Doug Maxwell from YouTube Audio Library')"
-    #rm -f "${LOCAL_DIR}/${FILENAME}" # Remove original video without music
-    # Delete video from bucket
-    echo "Not Deleting $VIDEO_URI from bucket..."
-    #gsutil rm "$VIDEO_URI"
-    if [ $? -eq 0 ]; then
-      echo "Successfully deleted $VIDEO_URI from bucket"
-    else
-      echo "Error deleting $VIDEO_URI from bucket"
-    fi
+    echo "Successfully renamed $OUTPUT_FILENAME"
   else
-    echo "Error adding music to $FILENAME"
+    echo "Error renaming to $FILENAME"
   fi
 else
   echo "Error downloading $VIDEO_URI"
