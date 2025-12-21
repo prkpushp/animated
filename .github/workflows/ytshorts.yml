@@ -1,10 +1,12 @@
 name: C2C Shorts
 
 on:
+  create:
   workflow_dispatch:
 
 jobs:
   build:
+    if: ${{ github.event.ref_type == 'branch' && endsWith(github.event.ref, '-s') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
