@@ -1,4 +1,4 @@
-name: C2C Shorts 
+name: C2C Shorts
 
 on:
   workflow_dispatch:
@@ -13,24 +13,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
           cache-dependency-path: c2c/requirements.txt
-          
+
       - name: Auth to Google Cloud (service account JSON)
         uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
           create_credentials_file: true
           export_environment_variables: true
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
 
       - name: System dependencies (ffmpeg + fonts)
         run: |
