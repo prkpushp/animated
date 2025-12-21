@@ -64,8 +64,8 @@ jobs:
       # Run script
       - name: Run video generation script
         run: |
-          chmod +x generate_veo2_video_locally_with_animated_animals_and_music.sh
-          ./generate_veo2_video_locally_with_animated_animals_and_music.sh
+          chmod +x zzs/generate_veo2_video_locally_with_animated_animals_and_music.sh
+          ./zzs/generate_veo2_video_locally_with_animated_animals_and_music.sh
 
       # Upload video as artifact
       - name: Upload video artifact
