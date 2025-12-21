@@ -29,9 +29,13 @@ ASPECT_RATIO = os.environ.get("ASPECT_RATIO", "9:16")
 
 CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "Cloud to Capital")
 
+OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "c2c/output")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-OUTPUT_VIDEO = os.environ.get("OUTPUT_VIDEO", f"youtube_shorts_{timestamp}.mp4")
-OUTPUT_METADATA = os.environ.get("OUTPUT_METADATA", f"youtube_metadata_{timestamp}.json")
+OUTPUT_VIDEO = os.path.join(OUTPUT_DIR, f"youtube_shorts_{timestamp}.mp4")
+OUTPUT_METADATA = os.path.join(OUTPUT_DIR, f"youtube_metadata_{timestamp}.json")
+
 
 
 # -----------------------
