@@ -56,8 +56,15 @@ jobs:
         run: |
           python c2c/generate_shorts.py
 
-      - name: Upload mp4 artifact
+      - name: Set run timestamp
+        shell: bash
+        run: echo "RUN_TS=$(date +'%Y%m%d_%H%M%S')" >> "$GITHUB_ENV"
+      
+      - name: Upload outputs
         uses: actions/upload-artifact@v4
         with:
-          name: youtube-shorts-output
-          path: youtube_shorts_*.mp4
+          name: youtube-shorts-output-${{ env.RUN_TS }}-run${{ github.run_id }}
+          if-no-files-found: error
+          path: |
+            c2c/output/youtube_shorts_*.mp4
+            c2c/output/youtube_metadata_*.json
