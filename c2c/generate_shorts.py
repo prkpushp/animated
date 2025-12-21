@@ -19,17 +19,19 @@ from moviepy import AudioFileClip, ImageClip, concatenate_videoclips
 # -----------------------
 # CONFIGURATION (ENV-FIRST)
 # -----------------------
-SERVICE_ACCOUNT_KEY = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")  # set by google-github-actions/auth
+SERVICE_ACCOUNT_KEY = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
 LOCATION = os.environ.get("LOCATION", "us-central1")
 
-# GitHub Actions step sets MP3_FILE to something like: shorts_input/foo.mp3
-MP3_FILE = os.environ.get("MP3_FILE")
+MP3_FILE = os.environ.get("MP3_FILE")  # workflow sets this (c2c/input/*.mp3 or *.mpeg)
 
-IMAGE_DURATION = float(os.environ.get("IMAGE_DURATION", "5"))  # seconds per image
-ASPECT_RATIO = os.environ.get("ASPECT_RATIO", "9:16")  # YouTube Shorts (vertical)
+IMAGE_DURATION = float(os.environ.get("IMAGE_DURATION", "5"))
+ASPECT_RATIO = os.environ.get("ASPECT_RATIO", "9:16")
+
+CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "Cloud to Capital")
 
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 OUTPUT_VIDEO = os.environ.get("OUTPUT_VIDEO", f"youtube_shorts_{timestamp}.mp4")
+OUTPUT_METADATA = os.environ.get("OUTPUT_METADATA", f"youtube_metadata_{timestamp}.json")
 
 
 # -----------------------
@@ -39,25 +41,22 @@ def init_vertex_ai():
     if not SERVICE_ACCOUNT_KEY:
         raise RuntimeError(
             "GOOGLE_APPLICATION_CREDENTIALS is not set. "
-            "In GitHub Actions, ensure google-github-actions/auth@v3 runs with create_credentials_file+export_environment_variables."
+            "Ensure google-github-actions/auth@v3 runs with create_credentials_file + export_environment_variables."
         )
 
     if not os.path.exists(SERVICE_ACCOUNT_KEY):
-        raise FileNotFoundError(
-            f"GOOGLE_APPLICATION_CREDENTIALS points to a missing file: {SERVICE_ACCOUNT_KEY}"
-        )
+        raise FileNotFoundError(f"Missing credentials file at: {SERVICE_ACCOUNT_KEY}")
 
     with open(SERVICE_ACCOUNT_KEY, "r", encoding="utf-8") as f:
         sa_info = json.load(f)
 
     project_id = os.environ.get("GOOGLE_CLOUD_PROJECT") or sa_info.get("project_id")
     if not project_id:
-        raise RuntimeError("Could not determine project_id from service account JSON (missing 'project_id').")
+        raise RuntimeError("Could not determine project_id from service account JSON.")
 
     credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_KEY)
     vertexai.init(project=project_id, location=LOCATION, credentials=credentials)
 
-    print(f"✓ Using service account file: {SERVICE_ACCOUNT_KEY}")
     print(f"✓ Project ID: {project_id}")
     print(f"✓ Location: {LOCATION}")
 
@@ -66,7 +65,6 @@ def init_vertex_ai():
 # HELPERS
 # -----------------------
 def get_audio_duration(file_path: str) -> float:
-    """Get the duration of an audio file in seconds."""
     try:
         audio = AudioFileClip(file_path)
         duration = float(audio.duration or 0.0)
@@ -77,40 +75,24 @@ def get_audio_duration(file_path: str) -> float:
         return 0.0
 
 
-def generate_prompts_from_audio(audio_path: str, num_images: int):
-    """Upload audio and generate image prompts based on its content using Gemini."""
-    print(f"Uploading and analyzing: {audio_path}...")
-
-    model = GenerativeModel("gemini-2.0-flash-exp")
-
-    with open(audio_path, "rb") as f:
-        audio_data = f.read()
-
-    # Works for both .mp3 and .mpeg audio files in most cases
-    audio_part = Part.from_data(data=audio_data, mime_type="audio/mpeg")
-
+def transcribe_audio_with_timestamps(audio_part, model) -> str:
     transcript_prompt = (
         "Transcribe this audio with approximate timestamps 5-6 seconds each. "
         "Format: [0:00-0:05] text here, [0:05-0:10] text here, etc."
     )
-
     transcript_response = model.generate_content([audio_part, transcript_prompt])
-    transcript = (transcript_response.text or "").strip()
-    print(f"\n📝 Transcript:\n{transcript}\n")
+    return (transcript_response.text or "").strip()
 
+
+def generate_prompts_from_transcript(transcript: str, audio_part, model, num_images: int):
     prompt_text = (
         f"Based on this audio transcript:\n{transcript}\n\n"
         f"Generate exactly {num_images} distinct visual scene prompts for a YouTube Shorts video. "
         "Style: Vibrant American or Australian aesthetic. "
         "For each prompt, if there's a key number, statistic, or important fact mentioned, "
         "include it at the end in this format: [TEXT: your text here]. "
-        "Examples:\n"
-        "- 'Microsoft office building with Indian architecture [TEXT: $250 Billion]'\n"
-        "- 'Partnership handshake with rangoli patterns [TEXT: 27% Stake]'\n"
-        "- 'AI servers in colorful data center [TEXT: 7 Years]'\n\n"
         "Output ONLY the prompts, one per line, without numbering."
     )
-
     response = model.generate_content([audio_part, prompt_text])
 
     prompts_with_text = []
@@ -125,40 +107,49 @@ def generate_prompts_from_audio(audio_path: str, num_images: int):
     return prompts_with_text[:num_images]
 
 
+def generate_prompts_and_transcript_from_audio(audio_path: str, num_images: int):
+    print(f"Uploading and analyzing: {audio_path}...")
+
+    model = GenerativeModel("gemini-2.0-flash-exp")
+
+    with open(audio_path, "rb") as f:
+        audio_data = f.read()
+
+    audio_part = Part.from_data(data=audio_data, mime_type="audio/mpeg")
+
+    transcript = transcribe_audio_with_timestamps(audio_part, model)
+    print(f"\n📝 Transcript:\n{transcript}\n")
+
+    prompts = generate_prompts_from_transcript(transcript, audio_part, model, num_images)
+    return transcript, prompts
+
+
 def _pick_font(base_font_size: int):
-    """Pick a font that exists on Linux (GitHub Actions) and also works on Mac locally."""
     font_paths = [
-        # Ubuntu/GitHub Actions runner (installed via fonts-dejavu-core)
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        # macOS fallbacks
         "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
         "/Library/Fonts/Arial Bold.ttf",
     ]
-
     for p in font_paths:
         if os.path.exists(p):
             try:
                 return ImageFont.truetype(p, base_font_size), p
             except Exception:
                 pass
-
     return ImageFont.load_default(), None
 
 
 def add_text_overlay(image_path: str, text: str, output_path: str) -> str:
-    """Add text overlay to an image with professional styling."""
     img = Image.open(image_path).convert("RGBA")
     draw = ImageDraw.Draw(img)
-
     width, height = img.size
 
     base_font_size = int(height * 0.05)
-    text_length = len(text)
-    if text_length > 20:
+    if len(text) > 20:
         base_font_size = int(base_font_size * 0.7)
-    elif text_length > 15:
+    elif len(text) > 15:
         base_font_size = int(base_font_size * 0.85)
 
     font, chosen_font_path = _pick_font(base_font_size)
@@ -171,7 +162,6 @@ def add_text_overlay(image_path: str, text: str, output_path: str) -> str:
     if text_width > max_text_width:
         scale_factor = max_text_width / max(text_width, 1)
         new_size = max(10, int(base_font_size * scale_factor))
-
         if chosen_font_path:
             try:
                 font = ImageFont.truetype(chosen_font_path, new_size)
@@ -189,8 +179,6 @@ def add_text_overlay(image_path: str, text: str, output_path: str) -> str:
 
     padding = int(height * 0.02)
     bg_bbox = [x - padding, y - padding, x + text_width + padding, y + text_height + padding]
-
-    # Semi-transparent black background
     draw.rectangle(bg_bbox, fill=(0, 0, 0, 220))
 
     outline_width = 2
@@ -200,29 +188,23 @@ def add_text_overlay(image_path: str, text: str, output_path: str) -> str:
                 continue
             draw.text((x + ox, y + oy), text, font=font, fill=(0, 0, 0, 255))
 
-    # Gold main text
     draw.text((x, y), text, font=font, fill=(255, 215, 0, 255))
-
     img.save(output_path)
     return output_path
 
 
 def generate_images(prompts):
-    """Generate images from text prompts using Imagen on Vertex AI."""
     image_files = []
     os.makedirs("generated_frames", exist_ok=True)
 
     try:
-        print("Loading Imagen 4 model (better quotas: 50 requests/minute)...")
+        print("Loading Imagen 4 model...")
         model = ImageGenerationModel.from_pretrained("imagen-4.0-fast-generate-001")
-        print("✓ Using Imagen 4 Fast (50 RPM quota)")
+        print("✓ Using Imagen 4 Fast")
     except Exception as e:
         print(f"⚠️  Imagen 4 not available: {e}")
-        print("Falling back to Imagen 3...")
         model = ImageGenerationModel.from_pretrained("imagen-3.0-generate-002")
-        print("⚠️  Using Imagen 3 (1 RPM quota - will be slower)")
-
-    print(f"\nGenerating {len(prompts)} images in {ASPECT_RATIO} format...")
+        print("⚠️  Using Imagen 3")
 
     for i, prompt_line in enumerate(prompts):
         print(f"\nProcessing image {i+1}/{len(prompts)}...")
@@ -236,12 +218,8 @@ def generate_images(prompts):
             prompt = re.sub(r"\[TEXT:[^\]]+\]", "", prompt_line).strip()
             print(f"  📝 Text overlay: {text_overlay}")
 
-        print(f"  Prompt: {prompt[:80]}...")
-
         if i > 0:
-            wait_time = 3
-            print(f"  ⏳ Waiting {wait_time}s...")
-            time.sleep(wait_time)
+            time.sleep(3)
 
         max_retries = 5
         retry_delay = 10
@@ -260,7 +238,6 @@ def generate_images(prompts):
                 images[0].save(location=temp_filename)
 
                 if text_overlay:
-                    print(f"  ✍️  Adding text overlay: {text_overlay}")
                     add_text_overlay(temp_filename, text_overlay, final_filename)
                     os.remove(temp_filename)
                 else:
@@ -271,20 +248,13 @@ def generate_images(prompts):
                 break
 
             except Exception as e:
-                error_msg = str(e)
-                if "429" in error_msg or "Quota exceeded" in error_msg:
-                    if attempt < max_retries - 1:
-                        print(f"  ⚠️  Rate limit hit (attempt {attempt + 1}/{max_retries})")
-                        print(f"  ⏳ Waiting {retry_delay}s before retry...")
-                        time.sleep(retry_delay)
-                        retry_delay *= 2
-                    else:
-                        print(f"  ✗ Image {i+1} failed after {max_retries} attempts")
-                        if image_files:
-                            image_files.append(image_files[-1])
-                            print(f"  → Using fallback: {image_files[-1]}")
+                msg = str(e)
+                if ("429" in msg or "Quota exceeded" in msg) and attempt < max_retries - 1:
+                    print(f"  ⚠️  Rate limit hit; retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
                 else:
-                    print(f"  ✗ Image {i+1} failed: {e}")
+                    print(f"  ✗ Image failed: {e}")
                     if image_files:
                         image_files.append(image_files[-1])
                         print(f"  → Using fallback: {image_files[-1]}")
@@ -294,7 +264,6 @@ def generate_images(prompts):
 
 
 def create_zooming_clip(image_path, duration, zoom_ratio=1.3):
-    """Create a clip with zoom out effect (Ken Burns effect)."""
     clip = ImageClip(image_path).with_duration(duration)
     w, h = clip.size
 
@@ -318,74 +287,118 @@ def create_zooming_clip(image_path, duration, zoom_ratio=1.3):
 
 
 def create_video(audio_path, image_files, output_path, duration_per_image):
-    """Combine images and audio into a video with zoom effects."""
     print("\nStitching video together with zoom effects...")
 
-    clips = []
-    for i, img in enumerate(image_files):
-        print(f"  Adding zoom effect to image {i+1}/{len(image_files)}...")
-        clips.append(create_zooming_clip(img, duration_per_image, zoom_ratio=1.3))
-
+    clips = [create_zooming_clip(img, duration_per_image, zoom_ratio=1.3) for img in image_files]
     video = concatenate_videoclips(clips, method="compose")
+
     audio = AudioFileClip(audio_path)
     final_video = video.with_audio(audio)
 
-    print("\n  Rendering final video...")
-    final_video.write_videofile(
-        output_path,
-        fps=24,
-        codec="libx264",
-        audio_codec="aac",
-    )
-
-    print(f"\n✅ Done! Created: {output_path}")
-    print(f"   Duration: {audio.duration:.2f} seconds")
-    print(f"   Images used: {len(image_files)}")
-    print("   Effect: Zoom out (Ken Burns)")
+    print("\nRendering final video...")
+    final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac")
 
     audio.close()
     final_video.close()
+    print(f"✅ Created: {output_path}")
+
+
+# -----------------------
+# NEW: SEO METADATA JSON
+# -----------------------
+def generate_youtube_metadata_json(transcript: str, channel_name: str) -> dict:
+    """
+    Returns dict: {"title": "...", "description": "...", "hashtags": ["#...", ...]}
+    """
+    model = GenerativeModel("gemini-2.0-flash-exp")
+
+    prompt = f"""
+You are an expert YouTube SEO copywriter.
+
+Channel: {channel_name}
+Content type: YouTube Shorts
+Topic: finance / investing / money (use transcript to infer exact topic)
+
+Transcript:
+{transcript}
+
+Create SEO-optimized metadata in STRICT JSON ONLY (no markdown, no commentary), with exactly these keys:
+{{
+  "title": "...",
+  "description": "...",
+  "hashtags": ["#tag1", "#tag2", "..."]
+}}
+
+Rules:
+- Title must be <= 100 characters.
+- Description must be <= 500 characters.
+- Put the primary keyword in the first 50 characters of the title.
+- First 150 characters of description should be a strong hook + topic summary.
+- Include a short CTA to subscribe to "{channel_name}" near the top.
+- Hashtags: 5 to 12 total, finance-relevant, include #shorts, and avoid duplicates.
+- Hashtags must start with # and contain no spaces.
+"""
+
+    resp = model.generate_content(prompt)
+    text = (resp.text or "").strip()
+
+    # Try direct JSON parse; fallback to extracting first JSON object
+    try:
+        data = json.loads(text)
+    except Exception:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            raise RuntimeError("Model did not return JSON.")
+        data = json.loads(text[start : end + 1])
+
+    # Minimal sanity normalization
+    data["hashtags"] = [h.strip() for h in data.get("hashtags", []) if isinstance(h, str) and h.strip().startswith("#")]
+    data["title"] = str(data.get("title", "")).strip()
+    data["description"] = str(data.get("description", "")).strip()
+    return data
+
+
+def save_metadata_json(metadata: dict, path: str):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, ensure_ascii=False, indent=2)
+    print(f"✓ Saved metadata JSON: {path}")
 
 
 def main():
     print("=" * 60)
     print("YouTube Shorts Video Generator using Vertex AI")
-    print("Format: 9:16 (Vertical)")
     print("=" * 60)
 
     init_vertex_ai()
 
     if not MP3_FILE:
-        print("❌ Error: MP3_FILE env var not set. The workflow should set it after finding audio in shorts_input/.")
+        print("❌ Error: MP3_FILE env var not set (workflow should select an audio file).")
         return
-
     if not os.path.exists(MP3_FILE):
-        print(f"❌ Error: Audio file '{MP3_FILE}' not found!")
+        print(f"❌ Error: Audio file not found: {MP3_FILE}")
         return
 
     duration = get_audio_duration(MP3_FILE)
     if duration <= 0:
         return
 
-    print(f"\n📊 Audio duration: {duration:.2f} seconds")
-
     num_images = math.ceil(duration / IMAGE_DURATION)
-    print(f"📸 Will generate {num_images} images ({IMAGE_DURATION}s each)")
+    print(f"Audio duration: {duration:.2f}s -> generating {num_images} images")
 
-    print("\n" + "=" * 60)
-    prompts = generate_prompts_from_audio(MP3_FILE, num_images)
-    print(f"\n✓ Generated {len(prompts)} prompts:")
-    for i, p in enumerate(prompts, 1):
-        print(f"   {i}. {p}")
+    transcript, prompts = generate_prompts_and_transcript_from_audio(MP3_FILE, num_images)
 
-    print("\n" + "=" * 60)
+    # NEW: generate & save metadata JSON for later upload use
+    metadata = generate_youtube_metadata_json(transcript, CHANNEL_NAME)
+    save_metadata_json(metadata, OUTPUT_METADATA)
+
+    print(f"Generated {len(prompts)} prompts")
     image_paths = generate_images(prompts)
 
     if image_paths:
-        print("\n" + "=" * 60)
         create_video(MP3_FILE, image_paths, OUTPUT_VIDEO, duration / len(image_paths))
     else:
-        print("\n❌ No images were generated. Cannot create video.")
+        print("❌ No images were generated. Cannot create video.")
 
 
 if __name__ == "__main__":
