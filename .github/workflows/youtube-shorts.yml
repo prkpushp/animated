@@ -1,4 +1,4 @@
-name: Generate YouTube Shorts (finance)
+name: C2C Shorts 
 
 on:
   workflow_dispatch:
@@ -40,14 +40,14 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r c2c/requirements.txt
 
-      - name: Pick audio from shorts_input/
+      - name: Pick audio from c2c/input/
         shell: bash
         run: |
-          AUDIO_FILE="$(find shorts_input -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.mpeg" \) | sort | head -n 1)"
+          AUDIO_FILE="$(find c2c/input -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.mpeg" \) | sort | head -n 1)"
           if [ -z "$AUDIO_FILE" ]; then
-            echo "No .mp3 or .mpeg found in shorts_input/"
+            echo "No .mp3 or .mpeg found in c2c/input/"
             exit 1
           fi
           echo "MP3_FILE=$AUDIO_FILE" >> "$GITHUB_ENV"
@@ -57,7 +57,7 @@ jobs:
         env:
           LOCATION: us-central1
         run: |
-          python generate_shorts.py
+          python c2c/generate_shorts.py
 
       - name: Upload mp4 artifact
         uses: actions/upload-artifact@v4
