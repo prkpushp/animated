@@ -6,7 +6,6 @@ LOCATION_ID="us-central1"
 API_ENDPOINT="us-central1-aiplatform.googleapis.com"
 MODEL_ID="veo-3.1-fast-generate-001"   #Earlier veo-2.0-generate-001
 STORAGE_URI="gs://helloranjan1/output/"
-AUDIO_FILE=`ls *.mp3| shuf | head -n 1`
 LOCAL_DIR="./videos"
 
 # Create local directory if it doesn't exist
@@ -70,12 +69,7 @@ if ! command -v ffmpeg &> /dev/null; then
   echo "Install with: sudo apt-get install ffmpeg (Ubuntu) or brew install ffmpeg (macOS)"
   exit 1
 fi
-if [ ! -f "$AUDIO_FILE" ]; then
-  echo "Error: Audio file '$AUDIO_FILE' not found."
-  echo "Please download a royalty-free track from YouTube Audio Library (https://www.youtube.com/audiolibrary)."
-  echo "Example: Search for 'cartoon battle music', download a track, and save as '$AUDIO_FILE' in this directory."
-  exit 1
-fi
+
 
 # Display generated prompt
 echo "Generated prompt: $PROMPT"
