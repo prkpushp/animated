@@ -61,7 +61,7 @@ jobs:
           PROMPT_INPUT="${{ inputs.prompt }}"
 
           if [ -z "$PROMPT_INPUT" ]; then
-            PROMPT_INPUT="Generate a single, breath-taking hyperrealistic natural scene in 16K cinematic HDR. Focus on a vibrant, high-contrast palette—deep emeralds, ambers color of your choice, and iridescent highlights. Choose one environment of your choice. Incorporate dynamic colours of your choice. Emphasize subtle motion: shimmering water surfaces, floating dust motes in light beams, or wind-swept foliage. The scene should feel lush and energetic yet deeply soulful, utilizing a wide color gamut to create a vivid, dreamlike atmosphere. The goal is relaxation"
+            PROMPT_INPUT="Generate a single, breath-taking hyperrealistic natural scene in 16K cinematic HDR relaxation. Focus on ambers color of your choice. Choose one environment of your choice. Incorporate dynamic colours of your choice. Emphasize subtle motion: shimmering water surfaces or similar, floating dust motes in light beams or similar, or wind-swept foliage or similar. The scene should feel lush and energetic yet deeply soulful, dreamlike atmosphere of your choice"
           fi
 
           ACCESS_TOKEN=$(gcloud auth print-access-token)
