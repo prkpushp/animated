@@ -7,7 +7,6 @@ on:
       - 'rf/input/**/*.wav'
       - 'rf/input/**/*.m4a'    
       - 'rf/input/**/*.mpeg'  
-  create:
   workflow_dispatch:
 
 jobs:
