@@ -1,7 +1,6 @@
 name: C2C Shorts
 
 on:
-  create:
   workflow_dispatch:
 
 jobs:
