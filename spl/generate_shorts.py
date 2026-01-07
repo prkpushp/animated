@@ -321,7 +321,7 @@ You are an expert YouTube SEO copywriter.
 
 Channel: {channel_name}
 Content type: YouTube Shorts
-Topic: finance / investing / money (use transcript to infer exact topic)
+Topic: Social Psychology / Human Behavior / Social Intelligence/ Mindset Mastery (use transcript to infer exact topic)
 
 Transcript:
 {transcript}
@@ -339,7 +339,7 @@ Rules:
 - Put the primary keyword in the first 50 characters of the title.
 - First 150 characters of description should be a strong hook + topic summary.
 - Include a short CTA to subscribe to "{channel_name}" near the top.
-- Hashtags: 5 to 12 total, finance-relevant, include #shorts, and avoid duplicates.
+- Hashtags: 5 to 12 total, psychology-relevant, include #shorts, and avoid duplicates.
 - Hashtags must start with # and contain no spaces.
 """
 
