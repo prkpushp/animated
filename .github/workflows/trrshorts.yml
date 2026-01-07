@@ -1,13 +1,13 @@
 name: TRR Shorts
 
 on:
-  push:
-    paths:
-      - 'trr/input/**/*.mp3'
-      - 'trr/input/**/*.wav'
-      - 'trr/input/**/*.m4a'    
-      - 'trr/input/**/*.mpeg'  
   workflow_dispatch:
+    inputs:
+      topic:
+        description: "Topic for today's short (e.g., 'US attacks Venezuela')"
+        required: true
+        type: string
+  
 
 jobs:
   build:
@@ -43,6 +43,51 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r trr/requirements.txt
 
+      - name: Generate voiceover script (Gemini on Vertex)
+        env:
+          LOCATION: us-central1
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          TOPIC: ${{ inputs.topic }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p trr/voiceover trr/tmp
+
+          PROMPT=$'Role: You are the Lead Scriptwriter for "The Rogue Report," a high-growth YouTube channel specializing in gritty, independent geopolitical analysis for a US-based audience.\nTask: Write a 60-second voiceover only(no time-stamp) script (approximately 150-160 words) on the topic: "'"$TOPIC"$'"\nThe "Rogue" Style Guidelines:\n\nThe Perspective: Avoid mainstream media "talking points." Focus on Realpolitik—money, geography, and power.\nThe Tone: Authoritative, cynical, and urgent. Use "Intelligence Briefing" language (e.g., leverage, choke point, strategic retreat, kill-switch).\nThe Rogue\'s Wit (Humour): Inject dry, dark, or "Desi-style" cynical humor. Compare incompetent world leaders to "clueless middle managers" or chaotic global events to "family wedding drama." The humor should feel like a "knowing wink"—smart, skeptical, slightly exhausted.\nThe Audience Hook: Connect the global event directly to the US viewer\'s life (inflation, tech access, national security).\nVocabulary: Use punchy verbs and short sentences. Avoid academic jargon.\n\nScript Structure (60 Seconds):\n00-10s: Hook.\n10-30s: Intelligence.\n30-50s: Impact.\n50-60s: Rogue Take + ask audience + sign-off: "Stay Rogue."\nConstraint: Not jokey; humor must bite like a cold truth.'
+
+          cat > trr/tmp/gemini_req.json <<JSON
+          {
+            "contents": [{
+              "role": "user",
+              "parts": [{ "text": ${PROMPT@Q} }]
+            }],
+            "generationConfig": {
+              "temperature": 0.7,
+              "maxOutputTokens": 256
+            }
+          }
+          JSON
+
+          API="https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/gemini-2.0-flash:generateContent"
+          curl -sS -X POST \
+            -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+            -H "Content-Type: application/json" \
+            "$API" \
+            -d @trr/tmp/gemini_req.json \
+            > trr/tmp/gemini_resp.json
+
+          # Extract the model text
+          VO_TEXT="$(jq -r '.candidates[0].content.parts[0].text // empty' trr/tmp/gemini_resp.json)"
+          if [[ -z "${VO_TEXT// }" ]]; then
+            echo "Gemini returned empty text. Response:"
+            cat trr/tmp/gemini_resp.json
+            exit 1
+          fi
+
+          VO_FILE="trr/voiceover/voiceover.txt"
+          printf "%s\n" "$VO_TEXT" > "$VO_FILE"
+          echo "VOICEOVER_FILE=$VO_FILE" >> "$GITHUB_ENV"
+          
       - name: Pick audio from trr/input/
         shell: bash
         run: |
@@ -59,10 +104,10 @@ jobs:
         run: |
           set -euo pipefail
           IN_FILE="${MP3_FILE}"
-          mkdir -p c2c/tmp
+          mkdir -p trr/tmp
           BASENAME="$(basename "$IN_FILE")"
           NAME="${BASENAME%.*}"
-          OUT_FILE="c2c/tmp/${NAME}_1.25x.mp3"
+          OUT_FILE="trr/tmp/${NAME}_1.25x.mp3"
           #ffmpeg -y -i "$IN_FILE" -filter:a "atempo=1.25" -vn "$OUT_FILE"
           ffmpeg -y -i "$IN_FILE" -filter:a "atempo=1.25" -vn -c:a libmp3lame -q:a 2 "$OUT_FILE"
           echo "MP3_FILE=$OUT_FILE" >> "$GITHUB_ENV"
