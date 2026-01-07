@@ -1,158 +1,140 @@
-# To run this code you need to install the following dependencies:
-# pip install google-genai
-
-import base64
+import argparse
 import mimetypes
 import os
-import re
 import struct
 from google import genai
 from google.genai import types
 
 
-def save_binary_file(file_name, data):
-    f = open(file_name, "wb")
-    f.write(data)
-    f.close()
-    print(f"File saved to to: {file_name}")
+def save_binary_file(file_name: str, data: bytes) -> None:
+    os.makedirs(os.path.dirname(file_name) or ".", exist_ok=True)
+    with open(file_name, "wb") as f:
+        f.write(data)
+    print(f"File saved to: {file_name}")
 
 
-def generate():
-    client = genai.Client(
-        api_key=os.environ.get("GEMINI_API_KEY"),
-    )
+def parse_audio_mime_type(mime_type: str) -> dict[str, int]:
+    # Defaults if mime params are missing
+    bits_per_sample = 16
+    rate = 24000
 
-    model = "gemini-2.5-pro-preview-tts"
-    contents = [
-        types.Content(
-            role="user",
-            parts=[
-                types.Part.from_text(text="""Read aloud in a warm and friendly tone: 
-Forget the \"democracy\" press releases. This isn't a family wedding where we care about who’s offended; it’s a hostile takeover of a failing subsidiary.
+    parts = (mime_type or "").split(";")
+    for p in parts:
+        p = p.strip()
+        if p.lower().startswith("rate="):
+            try:
+                rate = int(p.split("=", 1)[1])
+            except Exception:
+                pass
+        # Sometimes mime looks like: audio/L16;rate=24000
+        if p.lower().startswith("audio/l"):
+            try:
+                bits_per_sample = int(p.split("l", 1)[1])
+            except Exception:
+                pass
 
-On January 3rd, the U.S. pulled the kill-switch on the Maduro regime. Operation Absolute Resolve wasn't a \"strategic retreat\"—it was a midnight exfiltration. Delta Force snatched Maduro from Caracas like a package out for delivery, and by morning, he was being processed in Manhattan. While D.C. plays the \"clueless middle manager\" role, pretending this is about narcotics, the real leverage is the 300 billion barrels of heavy crude under the Venezuelan soil.
+    return {"bits_per_sample": bits_per_sample, "rate": rate}
 
-For you, this isn't just a headline. It’s a direct hit to the global supply chain. We’re looking at an oil quarantine and a potential flood of state-managed crude that could tank prices—or spike them if the remaining \"Chavista\" hardliners decide to burn the house down on the way out.
-
-The U.S. just grabbed the biggest gas station in the hemisphere. Is this the strategic masterstroke we’ve waited for, or just the start of another \"forever\" drama? Drop your intel below.
-
-Stay Rogue."""),
-            ],
-        ),
-    ]
-    generate_content_config = types.GenerateContentConfig(
-        temperature=1,
-        response_modalities=[
-            "audio",
-        ],
-        speech_config=types.SpeechConfig(
-            voice_config=types.VoiceConfig(
-                prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                    voice_name="Sadachbia"
-                )
-            )
-        ),
-    )
-
-    file_index = 0
-    for chunk in client.models.generate_content_stream(
-        model=model,
-        contents=contents,
-        config=generate_content_config,
-    ):
-        if (
-            chunk.candidates is None
-            or chunk.candidates[0].content is None
-            or chunk.candidates[0].content.parts is None
-        ):
-            continue
-        if chunk.candidates[0].content.parts[0].inline_data and chunk.candidates[0].content.parts[0].inline_data.data:
-            file_name = f"ENTER_FILE_NAME_{file_index}"
-            file_index += 1
-            inline_data = chunk.candidates[0].content.parts[0].inline_data
-            data_buffer = inline_data.data
-            file_extension = mimetypes.guess_extension(inline_data.mime_type)
-            if file_extension is None:
-                file_extension = ".wav"
-                data_buffer = convert_to_wav(inline_data.data, inline_data.mime_type)
-            save_binary_file(f"{file_name}{file_extension}", data_buffer)
-        else:
-            print(chunk.text)
 
 def convert_to_wav(audio_data: bytes, mime_type: str) -> bytes:
-    """Generates a WAV file header for the given audio data and parameters.
+    params = parse_audio_mime_type(mime_type)
+    bits_per_sample = params["bits_per_sample"]
+    sample_rate = params["rate"]
 
-    Args:
-        audio_data: The raw audio data as a bytes object.
-        mime_type: Mime type of the audio data.
-
-    Returns:
-        A bytes object representing the WAV file header.
-    """
-    parameters = parse_audio_mime_type(mime_type)
-    bits_per_sample = parameters["bits_per_sample"]
-    sample_rate = parameters["rate"]
     num_channels = 1
     data_size = len(audio_data)
     bytes_per_sample = bits_per_sample // 8
     block_align = num_channels * bytes_per_sample
     byte_rate = sample_rate * block_align
-    chunk_size = 36 + data_size  # 36 bytes for header fields before data chunk size
-
-    # http://soundfile.sapp.org/doc/WaveFormat/
+    chunk_size = 36 + data_size
 
     header = struct.pack(
         "<4sI4s4sIHHIIHH4sI",
-        b"RIFF",          # ChunkID
-        chunk_size,       # ChunkSize (total file size - 8 bytes)
-        b"WAVE",          # Format
-        b"fmt ",          # Subchunk1ID
-        16,               # Subchunk1Size (16 for PCM)
-        1,                # AudioFormat (1 for PCM)
-        num_channels,     # NumChannels
-        sample_rate,      # SampleRate
-        byte_rate,        # ByteRate
-        block_align,      # BlockAlign
-        bits_per_sample,  # BitsPerSample
-        b"data",          # Subchunk2ID
-        data_size         # Subchunk2Size (size of audio data)
+        b"RIFF",
+        chunk_size,
+        b"WAVE",
+        b"fmt ",
+        16,
+        1,
+        num_channels,
+        sample_rate,
+        byte_rate,
+        block_align,
+        bits_per_sample,
+        b"data",
+        data_size,
     )
     return header + audio_data
 
-def parse_audio_mime_type(mime_type: str) -> dict[str, int | None]:
-    """Parses bits per sample and rate from an audio MIME type string.
 
-    Assumes bits per sample is encoded like "L16" and rate as "rate=xxxxx".
+def tts(text: str, out_wav: str, voice_name: str) -> None:
+    # If GEMINI_API_KEY is set, SDK can pick it up automatically. [web:168]
+    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
-    Args:
-        mime_type: The audio MIME type string (e.g., "audio/L16;rate=24000").
+    model = "gemini-2.5-pro-preview-tts"
 
-    Returns:
-        A dictionary with "bits_per_sample" and "rate" keys. Values will be
-        integers if found, otherwise None.
-    """
-    bits_per_sample = 16
-    rate = 24000
+    contents = [
+        types.Content(
+            role="user",
+            parts=[types.Part.from_text(text=text)],
+        )
+    ]
 
-    # Extract rate from parameters
-    parts = mime_type.split(";")
-    for param in parts: # Skip the main type part
-        param = param.strip()
-        if param.lower().startswith("rate="):
-            try:
-                rate_str = param.split("=", 1)[1]
-                rate = int(rate_str)
-            except (ValueError, IndexError):
-                # Handle cases like "rate=" with no value or non-integer value
-                pass # Keep rate as default
-        elif param.startswith("audio/L"):
-            try:
-                bits_per_sample = int(param.split("L", 1)[1])
-            except (ValueError, IndexError):
-                pass # Keep bits_per_sample as default if conversion fails
+    config = types.GenerateContentConfig(
+        temperature=1,
+        response_modalities=["AUDIO"],
+        speech_config=types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice_name)
+            )
+        ),
+    )
 
-    return {"bits_per_sample": bits_per_sample, "rate": rate}
+    # Collect first audio chunk that contains inline_data.
+    # (Streaming is fine, but we just need the binary.)
+    audio_bytes = None
+    audio_mime = None
+
+    for chunk in client.models.generate_content_stream(
+        model=model,
+        contents=contents,
+        config=config,
+    ):
+        cand = (chunk.candidates or [None])[0]
+        if not cand or not cand.content or not cand.content.parts:
+            continue
+        part0 = cand.content.parts[0]
+        if getattr(part0, "inline_data", None) and part0.inline_data.data:
+            audio_bytes = part0.inline_data.data
+            audio_mime = part0.inline_data.mime_type
+            break
+
+    if not audio_bytes:
+        raise RuntimeError("No audio returned by TTS model.")
+
+    # If mime type isn’t a wav container, wrap to wav
+    ext = mimetypes.guess_extension(audio_mime or "")
+    if ext != ".wav":
+        audio_bytes = convert_to_wav(audio_bytes, audio_mime or "audio/L16;rate=24000")
+
+    save_binary_file(out_wav, audio_bytes)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--in", dest="in_file", required=True, help="Input text file")
+    ap.add_argument("--out", dest="out_wav", required=True, help="Output WAV path")
+    ap.add_argument("--voice", dest="voice", default="Sadachbia", help="Prebuilt voice name")
+    args = ap.parse_args()
+
+    with open(args.in_file, "r", encoding="utf-8") as f:
+        text = f.read().strip()
+
+    # Optional: prepend an instruction like in your example
+    text = f"Read aloud in a warm and friendly tone:\n{text}"
+
+    tts(text=text, out_wav=args.out_wav, voice_name=args.voice)
 
 
 if __name__ == "__main__":
-    generate()
+    main()
