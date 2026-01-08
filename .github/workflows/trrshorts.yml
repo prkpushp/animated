@@ -37,6 +37,18 @@ jobs:
           create_credentials_file: true
           export_environment_variables: true
 
+      - name: Verify Google Cloud authentication
+        run: |
+          gcloud auth list
+          gcloud config set project omega-episode-454707-j5
+          if ! gcloud auth print-access-token; then
+            echo "Error: Authentication failed"
+            exit 1
+          fi
+          echo "Authentication successful"
+          export PROJECT_ID=$(jq -r .project_id < "${{ env.GOOGLE_APPLICATION_CREDENTIALS }}")
+          echo "PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
+          
       - name: System dependencies (ffmpeg + fonts)
         run: |
           sudo apt-get update
@@ -47,26 +59,36 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r trr/requirements.txt
 
-      - name: Generate voiceover text file
+      - name: Generate voiceover text (Vertex Gemini)
         env:
+          LOCATION: us-central1
           TOPIC: ${{ inputs.topic }}
-        shell: bash
         run: |
           set -euo pipefail
-          mkdir -p trr/voiceover
-          cat > trr/voiceover/voiceover.txt <<'EOF'
-          Role: You are the Lead Scriptwriter for "The Rogue Report," a high-growth YouTube channel specializing in gritty, independent geopolitical analysis for a US-based audience.
-          Task: Write a 60-second voiceover only(no time-stamp) script (approximately 150-160 words) on the topic: "REPLACE_TOPIC"
-          The "Rogue" Style Guidelines:
-          The Perspective: Avoid mainstream media "talking points." Focus on Realpolitik—money, geography, and power.
-          The Tone: Authoritative, cynical, and urgent. Use "Intelligence Briefing" language (e.g., leverage, choke point, strategic retreat, kill-switch).
-          The Rogue's Wit (Humour): Inject dry, dark, or "Desi-style" cynical humor. Compare incompetent world leaders to "clueless middle managers" or chaotic global events to "family wedding drama."
-          The Audience Hook: Connect the global event directly to the US viewer's life (inflation, tech access, national security).
-          Vocabulary: Use punchy verbs and short sentences. Avoid academic jargon.
-          Script Structure: Hook; Intelligence; Impact; Rogue Take; end with "Stay Rogue."
-          EOF
-          # Replace placeholder
-          sed -i "s/REPLACE_TOPIC/${TOPIC}/g" trr/voiceover/voiceover.txt
+          mkdir -p trr/voiceover trr/tmp
+
+          PROMPT=$'Role: You are the Lead Scriptwriter for "The Rogue Report," a high-growth YouTube channel specializing in gritty, independent geopolitical analysis for a US-based audience.\nTask: Write a 60-second voiceover only(no time-stamp) script (approximately 150-160 words) on the topic: "'"$TOPIC"$'"\n\nStyle: Realpolitik, cynical, urgent. Intelligence Briefing language. Dry dark Desi-style wit (not jokey). Hook -> Intelligence -> Impact -> Rogue Take. End: "Stay Rogue."'
+
+          cat > trr/tmp/gemini_req.json <<JSON
+          {
+            "contents":[{"role":"user","parts":[{"text": ${PROMPT@Q} }]}],
+            "generationConfig":{"temperature":0.7,"maxOutputTokens":256}
+          }
+          JSON
+
+          API="https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/gemini-2.0-flash-001:generateContent"
+          curl -sS -X POST \
+            -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+            -H "Content-Type: application/json" \
+            "$API" \
+            -d @trr/tmp/gemini_req.json \
+            > trr/tmp/gemini_resp.json
+
+          VO_TEXT="$(jq -r '.candidates[0].content.parts[0].text // empty' trr/tmp/gemini_resp.json)"
+          test -n "${VO_TEXT// }"
+
+          echo "$VO_TEXT" > trr/voiceover/voiceover.txt
+
           
       - name: Pick audio from trr/input/
         shell: bash
