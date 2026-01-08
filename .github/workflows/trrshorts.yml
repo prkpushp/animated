@@ -168,6 +168,7 @@ jobs:
           path: |
             trr/output/youtube_shorts_*.mp4
             trr/output/youtube_metadata_*.json
+            trr/input/*
 
       - name: Write run ID to repo
         env:
