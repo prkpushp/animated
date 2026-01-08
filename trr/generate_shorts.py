@@ -339,7 +339,7 @@ Rules:
 - Put the primary keyword in the first 50 characters of the title.
 - First 150 characters of description should be a strong hook + topic summary.
 - Include a short CTA to subscribe to "{channel_name}" near the top.
-- Hashtags: 5 to 12 total, geopolitics-relevant, include #shorts, and avoid duplicates.
+- Hashtags: 5 to 12 total, "{{TOPIC}}" relevant, include #shorts, and avoid duplicates.
 - Hashtags must start with # and contain no spaces.
 """
 
