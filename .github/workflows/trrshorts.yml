@@ -159,6 +159,7 @@ jobs:
             trr/output/youtube_shorts_*.mp4
             trr/output/youtube_metadata_*.json
             trr/input/*
+            trr/voiceover/*
             
       - name: Run generator
         env:
