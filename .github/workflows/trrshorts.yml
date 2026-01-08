@@ -65,29 +65,48 @@ jobs:
           TOPIC: ${{ inputs.topic }}
         run: |
           set -euo pipefail
+          
           mkdir -p trr/voiceover trr/tmp
-
-          PROMPT=$'Role: You are the Lead Scriptwriter for "The Rogue Report," a high-growth YouTube channel specializing in gritty, independent geopolitical analysis for a US-based audience.\nTask: Write a 60-second voiceover only(no time-stamp) script (approximately 150-160 words) on the topic: "'"$TOPIC"$'"\n\nStyle: Realpolitik, cynical, urgent. Intelligence Briefing language. Dry dark Desi-style wit (not jokey). Hook -> Intelligence -> Impact -> Rogue Take. End: "Stay Rogue."'
-
-          cat > trr/tmp/gemini_req.json <<JSON
-          {
-            "contents":[{"role":"user","parts":[{"text": ${PROMPT@Q} }]}],
-            "generationConfig":{"temperature":0.7,"maxOutputTokens":256}
-          }
-          JSON
-
+          
+          # 1) Build prompt
+          PROMPT=$'Role: You are the Lead Scriptwriter for "The Rogue Report," a high-growth YouTube channel specializing in gritty, independent geopolitical analysis for a US-based audience.\nTask: Write a 60-second voiceover only(no time-stamp) script (approximately 150-160 words) on the topic: "'"$TOPIC"$'"\n\nThe Rogue Style: Realpolitik. Cynical. Urgent. Intelligence Briefing language (leverage, choke point, kill-switch). Dry dark Desi-style wit (not jokey).\nStructure: Hook (0-10s), Intelligence (10-30s), Impact (30-50s), Rogue Take (50-60s). End with: Stay Rogue.\nConstraint: ~150-160 words.'
+          
+          # 2) Create JSON safely (no manual escaping)
+          jq -n --arg text "$PROMPT" '{
+            contents: [{ role: "user", parts: [{ text: $text }] }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 256 }
+          }' > trr/tmp/gemini_req.json
+          
           API="https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/gemini-2.0-flash-001:generateContent"
+          
           curl -sS -X POST \
             -H "Authorization: Bearer $(gcloud auth print-access-token)" \
             -H "Content-Type: application/json" \
             "$API" \
             -d @trr/tmp/gemini_req.json \
             > trr/tmp/gemini_resp.json
-
-          VO_TEXT="$(jq -r '.candidates[0].content.parts[0].text // empty' trr/tmp/gemini_resp.json)"
-          test -n "${VO_TEXT// }"
-
+          
+          # 3) If error exists, show it and fail
+          if jq -e '.error' >/dev/null 2>&1 < trr/tmp/gemini_resp.json; then
+            echo "Vertex generateContent error:"
+            jq -r '.error | {code, message, status}' trr/tmp/gemini_resp.json
+            echo "Full response:"
+            cat trr/tmp/gemini_resp.json
+            exit 1
+          fi
+          
+          # 4) Extract text (parts[0].text is common, but join all parts to be safe)
+          VO_TEXT="$(jq -r '[.candidates[0].content.parts[].text] | join("")' trr/tmp/gemini_resp.json)"
+          
+          if [[ -z "${VO_TEXT//[[:space:]]/}" ]]; then
+            echo "Empty VO_TEXT. Full response:"
+            cat trr/tmp/gemini_resp.json
+            exit 1
+          fi
+          
           echo "$VO_TEXT" > trr/voiceover/voiceover.txt
+          echo "Wrote trr/voiceover/voiceover.txt"
+
           cat trr/voiceover/voiceover.txt
 
           
