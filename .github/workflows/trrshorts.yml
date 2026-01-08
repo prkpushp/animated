@@ -153,6 +153,7 @@ jobs:
       - name: Run generator
         env:
           LOCATION: us-central1
+          TOPIC: ${{ inputs.topic }}
         run: |
           python trr/generate_shorts.py
 
