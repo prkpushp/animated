@@ -88,6 +88,7 @@ jobs:
           test -n "${VO_TEXT// }"
 
           echo "$VO_TEXT" > trr/voiceover/voiceover.txt
+          cat trr/voiceover/voiceover.txt
 
           
       - name: Pick audio from trr/input/
@@ -100,6 +101,7 @@ jobs:
           fi
           echo "MP3_FILE=$AUDIO_FILE" >> "$GITHUB_ENV"
           echo "Using audio: $AUDIO_FILE"
+
 
       - name: Speed up audio 1.25x (ffmpeg)
         shell: bash
