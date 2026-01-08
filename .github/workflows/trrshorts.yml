@@ -149,7 +149,17 @@ jobs:
           #ffmpeg -y -i "$IN_FILE" -filter:a "atempo=1.25" -vn "$OUT_FILE"
           ffmpeg -y -i "$IN_FILE" -filter:a "atempo=1.25" -vn -c:a libmp3lame -q:a 2 "$OUT_FILE"
           echo "MP3_FILE=$OUT_FILE" >> "$GITHUB_ENV"
-          
+
+      - name: Upload outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: youtube-shorts-output-upload-${{ env.RUN_TS }}-run${{ github.run_id }}
+          if-no-files-found: error
+          path: |
+            trr/output/youtube_shorts_*.mp4
+            trr/output/youtube_metadata_*.json
+            trr/input/*
+            
       - name: Run generator
         env:
           LOCATION: us-central1
