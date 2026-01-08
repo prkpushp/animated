@@ -110,6 +110,20 @@ jobs:
 
           cat trr/voiceover/voiceover.txt
 
+      - name: Voiceover text -> WAV (Vertex Gemini TTS)
+        env:
+          PROJECT_ID: ${{ env.PROJECT_ID }}   # you already have it in env
+          LOCATION: us-central1
+        run: |
+          set -euo pipefail
+          mkdir -p trr/input
+          python trr/texttovoice.py \
+            --in trr/voiceover/voiceover.txt \
+            --out trr/input/voiceover.wav \
+            --project "$PROJECT_ID" \
+            --location "$LOCATION" \
+            --voice "Sadachbia"
+
           
       - name: Pick audio from trr/input/
         shell: bash
