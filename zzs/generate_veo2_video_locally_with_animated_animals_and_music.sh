@@ -207,7 +207,7 @@ if [ $? -eq 0 ]; then
   #echo "Adding music from $AUDIO_FILE to $FILENAME..."
   ffmpeg -i "${LOCAL_DIR}/${FILENAME}" -i "$AUDIO_FILE" -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 -shortest -y "$OUTPUT_FILENAME"
   #rename file to title/description specific
-  #mv "${LOCAL_DIR}/${FILENAME}" "$OUTPUT_FILENAME"
+  rm "${LOCAL_DIR}/${FILENAME}" 
   if [ $? -eq 0 ]; then
     echo "Successfully renamed $OUTPUT_FILENAME"
   else
