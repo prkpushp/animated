@@ -92,7 +92,7 @@ def generate_prompts_from_transcript(transcript: str, audio_part, model, num_ima
     prompt_text = (
         f"Based on this audio transcript:\n{transcript}\n\n"
         f"Generate exactly {num_images} distinct visual scene prompts for a YouTube Shorts video. "
-        "Style: Vibrant Indian/Desi aesthetic. "
+        "Style: Vibrant American aesthetic. "
         "For each prompt, if there's a key number, statistic, or important fact mentioned, "
         "include it at the end in this format: [TEXT: your text here]. "
         "Output ONLY the prompts, one per line, without numbering."
