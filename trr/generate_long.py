@@ -250,9 +250,9 @@ Segments:
             # fallback per segment: still unique-ish by including segment text
             base = segments[i].get("text", "").strip()
             img_prompt = (
-                f"Vibrant cinematic Indian/Desi scene illustrating: {base[:160]}"
+                f"Vibrant cinematic American scene illustrating: {base[:160]}"
                 if base else
-                "Vibrant cinematic Indian/Desi scene, documentary style, high detail"
+                "Vibrant cinematic American scene, documentary style, high detail"
             )
             prompts_with_text.append(f"{img_prompt} [TEXT: {_fallback_overlay_english(base)}]")
 
