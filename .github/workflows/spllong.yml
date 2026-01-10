@@ -43,12 +43,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r spl/requirements.txt
 
-      - name: Pick audio from spl/input/
+      - name: Pick audio from spl/
         shell: bash
         run: |
-          AUDIO_FILE="$(find spl/input -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) | sort | head -n 1)"
+          AUDIO_FILE="$(find spl -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) | sort | head -n 1)"
           if [ -z "$AUDIO_FILE" ]; then
-            echo "No .mp3 or .mpeg or wav found in spl/input/"
+            echo "No .mp3 or .mpeg or wav found in spl"
             exit 1
           fi
           echo "MP3_FILE=$AUDIO_FILE" >> "$GITHUB_ENV"
