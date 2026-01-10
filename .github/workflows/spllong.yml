@@ -72,7 +72,7 @@ jobs:
           LOCATION: us-central1
           ASPECT_RATIO: 16:9
         run: |
-          python spl/generate_shorts.py
+          python spl/generate_long.py
 
       - name: Set run timestamp
         shell: bash
