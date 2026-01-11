@@ -27,7 +27,7 @@ MP3_FILE = os.environ.get("MP3_FILE")  # workflow sets this (trr/input/*.mp3 or 
 IMAGE_DURATION = float(os.environ.get("IMAGE_DURATION", "5"))
 ASPECT_RATIO = os.environ.get("ASPECT_RATIO", "16:9")
 
-CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "Ranjan Financials")
+CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "The Rogue Report")
 
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "trr/output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -494,7 +494,7 @@ You are an expert YouTube SEO copywriter.
 
 Channel: {channel_name}
 Content type: YouTube Shorts
-Topic: finance / investing / money (use transcript to infer exact topic)
+Topic: Geopolitics / International Relations / Global Power / Foreign Policy / Global Conflict (use transcript to infer exact topic)
 
 Transcript:
 {transcript}
@@ -512,7 +512,7 @@ Rules:
 - Put the primary keyword in the first 50 characters of the title.
 - First 150 characters of description should be a strong hook + topic summary.
 - Include a short CTA to subscribe to "{channel_name}" near the top.
-- Hashtags: 5 to 12 total, finance-relevant, include #shorts, and avoid duplicates.
+- Hashtags: 5 to 12 total, geopolitics-relevant, include #shorts, and avoid duplicates.
 - Hashtags must start with # and contain no spaces.
 """
 
