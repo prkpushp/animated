@@ -24,6 +24,10 @@ jobs:
           credentials_json: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
           create_credentials_file: true
 
+      - name: Write SA key
+        run: |
+          echo '${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}' > /tmp/sa.json
+          
       # Debug: Check service account key file
       - name: Debug service account key
         run: |
