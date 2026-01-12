@@ -216,8 +216,6 @@ echo "Downloading video, adding music, and storing locally..."
 FILENAME=$(basename "$VIDEO_URI")
 OUTPUT_FILENAME="${LOCAL_DIR}/${SANITIZED_PROMPT}.mp4"
 echo "Downloading $VIDEO_URI to ${LOCAL_DIR}/${FILENAME}"
-gcloud auth activate-service-account --key-file=/tmp/sa.json
-gcloud config set project "${PROJECT_ID}"
 
 gsutil cp "$VIDEO_URI" "${LOCAL_DIR}/${FILENAME}"
 if [ $? -eq 0 ]; then
