@@ -52,9 +52,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg jq google-cloud-cli
+          gsutil cp gs://research-484112/output/12267221869252396931/sample_0.mp4 ./videos/sample_0.mp4
+          sleep 100
           
 
-          #gcloud components install gsutil --quiet
 
       # Run script
       - name: Run video generation script
