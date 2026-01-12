@@ -220,7 +220,13 @@ gsutil cp "$VIDEO_URI" "${LOCAL_DIR}/${FILENAME}"
 if [ $? -eq 0 ]; then
   echo "Successfully downloaded $FILENAME"
   #echo "Adding music from $AUDIO_FILE to $FILENAME..."
-  ffmpeg -i "${LOCAL_DIR}/${FILENAME}" -i "$AUDIO_FILE" -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 -shortest -y "$OUTPUT_FILENAME"
+  #ffmpeg -i "${LOCAL_DIR}/${FILENAME}" -i "$AUDIO_FILE" -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 -shortest -y "$OUTPUT_FILENAME"
+  ffmpeg -i "${LOCAL_DIR}/${FILENAME}" -i "$AUDIO_FILE" \
+  -filter_complex "[0:v]setpts=PTS/0.9[v];[1:a]atempo=0.9[a]" \
+  -map "[v]" -map "[a]" \
+  -c:v libx264 -c:a aac \
+  -shortest -y "$OUTPUT_FILENAME"
+
   #rename file to title/description specific
   rm "${LOCAL_DIR}/${FILENAME}" 
   if [ $? -eq 0 ]; then
