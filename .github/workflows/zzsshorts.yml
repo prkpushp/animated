@@ -51,8 +51,10 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg jq
-          gcloud components install gsutil --quiet
+          sudo apt-get install -y ffmpeg jq google-cloud-cli
+          
+
+          #gcloud components install gsutil --quiet
 
       # Run script
       - name: Run video generation script
