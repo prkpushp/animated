@@ -50,6 +50,7 @@ jobs:
           echo "Authentication successful"
           export PROJECT_ID=$(jq -r .project_id < "${{ env.GOOGLE_APPLICATION_CREDENTIALS }}")
           echo "PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
+          gcloud config set project $PROJECT_ID
 
       # Install dependencies
       - name: Install dependencies
