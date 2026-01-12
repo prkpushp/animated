@@ -1,13 +1,14 @@
 #!/bin/bash
 
 # Define project and model details
-#PROJECT_ID="abiding-window-465512-p7"
+
 LOCATION_ID="us-central1"
 API_ENDPOINT="us-central1-aiplatform.googleapis.com"
 MODEL_ID="veo-3.1-fast-generate-001"   #Earlier veo-2.0-generate-001
-STORAGE_URI="gs://helloranjan1/output/"
+STORAGE_URI="gs://$$PROJECT_ID/output/"
 AUDIO_FILE=`ls zzs/*.mp3| shuf | head -n 1`
 LOCAL_DIR="./videos"
+
 
 # Create local directory if it doesn't exist
 mkdir -p "$LOCAL_DIR"
@@ -19,6 +20,20 @@ LOCATION_ID_PROMPT="global"
 API_ENDPOINT_PROMPT="aiplatform.googleapis.com"
 MODEL_ID_PROMPT="gemini-2.5-flash-lite"
 GENERATE_CONTENT_API_PROMPT="streamGenerateContent"
+
+#check bucket present:
+: "${PROJECT_ID:?PROJECT_ID is not set}"
+BUCKET_NAME="${PROJECT_ID}"
+BUCKET_URI="gs://${BUCKET_NAME}"
+LOCATION="${BUCKET_LOCATION:-us}"
+if gcloud storage buckets describe "${BUCKET_URI}" >/dev/null 2>&1; then
+  echo "Bucket already exists: ${BUCKET_URI}"
+else
+  echo "Bucket not found, creating: ${BUCKET_URI}"
+  gcloud storage buckets create "${BUCKET_URI}" --location="${LOCATION}"
+  echo "Bucket created: ${BUCKET_URI}"
+fi
+
 
 # Create request body
 cat <<EOF > request.json
