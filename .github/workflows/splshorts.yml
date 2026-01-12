@@ -64,7 +64,7 @@ jobs:
           NAME="${BASENAME%.*}"
           OUT_FILE="spl/tmp/${NAME}_1.25x.mp3"
           #ffmpeg -y -i "$IN_FILE" -filter:a "atempo=1.25" -vn "$OUT_FILE"
-          ffmpeg -y -i "$IN_FILE" -filter:a "atempo=1.15" -vn -c:a libmp3lame -q:a 2 "$OUT_FILE"
+          ffmpeg -y -i "$IN_FILE" -filter:a "atempo=1.1" -vn -c:a libmp3lame -q:a 2 "$OUT_FILE"
           echo "MP3_FILE=$OUT_FILE" >> "$GITHUB_ENV"
           
       - name: Run generator
