@@ -35,17 +35,10 @@ jobs:
             exit 1
           fi
 
-      # Set up Google Cloud SDK
-      - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: omega-episode-454707-j5
-
       # Verify authentication
       - name: Verify Google Cloud authentication
         run: |
           gcloud auth list
-          gcloud config set project omega-episode-454707-j5
           if ! gcloud auth print-access-token; then
             echo "Error: Authentication failed"
             exit 1
