@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       topic:
-        description: "Topic for today's short (e.g., 'US attacks Venezuela')"
-        required: true
+        description: "Topic for today's short (e.g., 'Paisa Paisa')"
+        required: false
         type: string
 
 
