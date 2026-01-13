@@ -25,8 +25,7 @@ trap 'rm -f "$tmp"' EXIT
 # Gemini-TTS supports input.prompt; non-Gemini voices do not. [web:220]
 if [[ "$MODEL_NAME" == gemini-* ]]; then
   REQ="$(jq -n \
-    --arg prompt "A confident, high-energy financial podcaster. The tone should be authoritative but conversational and slightly cynical. Fast-paced delivery with clear articulation. Emphasize numbers and monetary values. Pause briefly before the punchline at the end. 
-:" \
+    --arg prompt "Energetic Hindi financial narrator. Clear, fast-paced. Emphasize numbers. Short pauses." \
     --arg text "$TEXT" \
     --arg voice "$VOICE_NAME" \
     --arg model "$MODEL_NAME" \
@@ -41,7 +40,7 @@ else
     --arg voice "$VOICE_NAME" \
     '{
       input: { text: $text },
-      voice: { languageCode: "en-us", name: $voice },
+      voice: { languageCode: "hi-IN", name: $voice },
       audioConfig: { audioEncoding: "LINEAR16" }
     }')"
 fi
