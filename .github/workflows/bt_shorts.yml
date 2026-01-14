@@ -35,9 +35,9 @@ jobs:
           MODE="dispatch"
           if [[ "${{ github.event_name }}" == "push" ]]; then
             if ls -1 ${{ env.YT_DIR }}/*.txt >/dev/null 2>&1; then
-              MODE="bt_txt"
+              MODE="yt_txt"
             elif ls -1 ${{ env.YT_DIR }}/*.mp3 ${{ env.YT_DIR }}/*.wav ${{ env.YT_DIR }}/*.m4a ${{ env.YT_DIR }}/*.mpeg >/dev/null 2>&1; then
-              MODE="bt_audio"
+              MODE="yt_audio"
             else
               MODE="push_unknown"
             fi
@@ -102,12 +102,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r ytci/scripts/requirements.txt
 
-      - name: Prepare bt workspace
+      - name: Prepare workspace
         run: |
+          echo "Preparing workspace: $YT_DIR"
           mkdir -p ${{ env.YT_DIR }}/input ${{ env.YT_DIR }}/output ${{ env.YT_DIR }}/tmp ${{ env.YT_DIR }}/voiceover ${{ env.YT_DIR }}/generated_frames
 
-      - name: Generate BT JSON (Vertex Gemini)
-        if: env.INPUT_MODE != 'bt_txt' && env.INPUT_MODE != 'bt_audio'
+      - name: Generate JSON (Vertex Gemini)
+        if: env.INPUT_MODE != 'yt_txt' && env.INPUT_MODE != 'yt_audio'
         env:
           LOCATION: us-central1
           TOPIC: ${{ env.TOPIC }}
@@ -138,21 +139,21 @@ jobs:
           fi
 
           RAW="$(jq -r '[.candidates[0].content.parts[].text] | join("")' ${{ env.YT_DIR }}/tmp/gemini_resp.json)"
-          echo "$RAW" > ${{ env.YT_DIR }}/voiceover/bt_raw.txt
+          echo "$RAW" > ${{ env.YT_DIR }}/voiceover/yt_raw.txt
 
           python - <<'PY'
           import json, re, pathlib
-          p = pathlib.Path("${{ env.YT_DIR }}/voiceover/bt_raw.txt").read_text(encoding="utf-8").strip()
+          p = pathlib.Path("${{ env.YT_DIR }}/voiceover/yt_raw.txt").read_text(encoding="utf-8").strip()
           m = re.search(r"\{.*\}", p, flags=re.S)
           if not m:
               raise SystemExit("No JSON object found in model output")
           data = json.loads(m.group(0))
-          pathlib.Path("${{ env.YT_DIR }}/voiceover/bt.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-          print("Wrote ${{ env.YT_DIR }}/voiceover/bt.json")
+          pathlib.Path("${{ env.YT_DIR }}/voiceover/yt.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+          print("Wrote ${{ env.YT_DIR }}/voiceover/yt.json")
           PY
 
-      - name: BT script_content -> WAV (TTS via ytci tts.sh + input.json)
-        if: env.INPUT_MODE != 'bt_audio'
+      - name: Script_content -> WAV (TTS via ytci tts.sh + input.json)
+        if: env.INPUT_MODE != 'yt_audio'
         shell: bash
         env:
           PROJECT_ID: ${{ env.PROJECT_ID }}
@@ -162,12 +163,12 @@ jobs:
           mkdir -p ${{ env.YT_DIR }}/input
           chmod +x ytci/scripts/tts.sh
       
-          if [[ "${INPUT_MODE}" == "bt_txt" ]]; then
+          if [[ "${INPUT_MODE}" == "yt_txt" ]]; then
             TXT_FILE="$(ls -1 ${{ env.YT_DIR }}/*.txt | head -n 1)"
-            echo "Using bt txt: $TXT_FILE"
+            echo "Using yt txt: $TXT_FILE"
             TEXT="$(cat "$TXT_FILE")"
           else
-            TEXT="$(jq -r '.script_content' ${{ env.YT_DIR }}/voiceover/bt.json)"
+            TEXT="$(jq -r '.script_content' ${{ env.YT_DIR }}/voiceover/yt.json)"
           fi
       
           ytci/scripts/tts.sh "$TEXT" ${{ env.YT_DIR }}/input/voiceover.wav
@@ -179,8 +180,8 @@ jobs:
           set -euo pipefail
           mkdir -p ${{ env.YT_DIR }}/input
       
-          if [[ "${INPUT_MODE}" == "bt_audio" ]]; then
-            AUDIO_FILE="$(find bt -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) | sort | head -n 1)"
+          if [[ "${INPUT_MODE}" == "yt_audio" ]]; then
+            AUDIO_FILE="$(find yt -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) | sort | head -n 1)"
           else
             AUDIO_FILE="$(find ${{ env.YT_DIR }}/input -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) | sort | head -n 1)"
           fi
@@ -238,22 +239,22 @@ jobs:
       
 
 
-      - name: Run generator (ytci code, bt workspace)
+      - name: Run generator (ytci code, workspace)
         env:
           LOCATION: us-central1
           CHANNEL_NAME: Borderline Theory
           CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
-          WORK_DIR: bt
+          WORK_DIR: ${{ vars.YT_DIR }}
           FRAMES_DIR: ${{ env.YT_DIR }}/generated_frames
           OUTPUT_DIR: ${{ env.YT_DIR }}/output
-          BT_JSON_PATH: ${{ env.YT_DIR }}/voiceover/bt.json
+          YT_JSON_PATH: ${{ env.YT_DIR }}/voiceover/yt.json
         run: |
           python ytci/scripts/generate_shorts.py
 
       - name: Upload outputs
         uses: actions/upload-artifact@v4
         with:
-          name: bt-output-run${{ github.run_id }}
+          name: ${{ env.YT_DIR }}-output-run${{ github.run_id }}
           if-no-files-found: error
           path: |
             ${{ env.YT_DIR }}/output/*.mp4
