@@ -11,6 +11,7 @@ on:
     paths:
       - "bt/*.mp3"
       - "bt/*.wav"
+      - "bt/*.txt"
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -21,15 +22,24 @@ jobs:
       - name: Checkout animated
         uses: actions/checkout@v4
 
-      - name: Detect external audio mode
+      - name: Detect input mode
         shell: bash
         run: |
           set -euo pipefail
+      
+          MODE="dispatch"
           if [[ "${{ github.event_name }}" == "push" ]]; then
-            echo "EXTERNAL_AUDIO=1" >> "$GITHUB_ENV"
-          else
-            echo "EXTERNAL_AUDIO=0" >> "$GITHUB_ENV"
+            if ls -1 bt/*.txt >/dev/null 2>&1; then
+              MODE="bt_txt"
+            elif ls -1 bt/*.mp3 bt/*.wav bt/*.m4a bt/*.mpeg >/dev/null 2>&1; then
+              MODE="bt_audio"
+            else
+              MODE="push_unknown"
+            fi
           fi
+      
+          echo "INPUT_MODE=$MODE" >> "$GITHUB_ENV"
+          echo "INPUT_MODE=$MODE"
 
       - name: Checkout ytci (private)
         uses: actions/checkout@v4
@@ -81,7 +91,7 @@ jobs:
           mkdir -p bt/input bt/output bt/tmp bt/voiceover bt/generated_frames
 
       - name: Generate BT JSON (Vertex Gemini)
-        if: env.EXTERNAL_AUDIO != '1'
+        if: env.INPUT_MODE != 'bt_txt' && env.INPUT_MODE != 'bt_audio'
         env:
           LOCATION: us-central1
           TOPIC: ${{ inputs.topic }}
@@ -126,16 +136,26 @@ jobs:
           PY
 
       - name: BT script_content -> WAV (TTS via ytci tts.sh + input.json)
-        if: env.EXTERNAL_AUDIO != '1'
+        if: env.INPUT_MODE != 'bt_audio'
         shell: bash
         env:
           PROJECT_ID: ${{ env.PROJECT_ID }}
           CHANNEL_CONFIG: ytci/bt/input.json
         run: |
           set -euo pipefail
+          mkdir -p bt/input
           chmod +x ytci/scripts/tts.sh
-          TEXT="$(jq -r '.script_content' bt/voiceover/bt.json)"
+      
+          if [[ "${INPUT_MODE}" == "bt_txt" ]]; then
+            TXT_FILE="$(ls -1 bt/*.txt | head -n 1)"
+            echo "Using bt txt: $TXT_FILE"
+            TEXT="$(cat "$TXT_FILE")"
+          else
+            TEXT="$(jq -r '.script_content' bt/voiceover/bt.json)"
+          fi
+      
           ytci/scripts/tts.sh "$TEXT" bt/input/voiceover.wav
+
 
       - name: Pick audio file
         shell: bash
@@ -143,26 +163,15 @@ jobs:
           set -euo pipefail
           mkdir -p bt/input
       
-          if [[ "${EXTERNAL_AUDIO}" == "1" ]]; then
-            # Audio uploaded directly into bt/
+          if [[ "${INPUT_MODE}" == "bt_audio" ]]; then
             AUDIO_FILE="$(find bt -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) | sort | head -n 1)"
-            if [ -z "$AUDIO_FILE" ]; then
-              echo "No audio found in bt/"
-              exit 1
-            fi
-            # Use it directly (or copy into bt/input if you prefer)
-            echo "MP3_FILE=$AUDIO_FILE" >> "$GITHUB_ENV"
-            echo "Using external audio: $AUDIO_FILE"
           else
-            # Audio produced by TTS step into bt/input (same as your current flow)
             AUDIO_FILE="$(find bt/input -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) | sort | head -n 1)"
-            if [ -z "$AUDIO_FILE" ]; then
-              echo "No audio found in bt/input/"
-              exit 1
-            fi
-            echo "MP3_FILE=$AUDIO_FILE" >> "$GITHUB_ENV"
-            echo "Using generated audio: $AUDIO_FILE"
           fi
+      
+          test -n "${AUDIO_FILE:-}"
+          echo "MP3_FILE=$AUDIO_FILE" >> "$GITHUB_ENV"
+          echo "Using audio: $AUDIO_FILE"
 
 
       - name: Speed up audio (ffmpeg, keep extension)
