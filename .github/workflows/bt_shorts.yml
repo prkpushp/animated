@@ -1,0 +1,159 @@
+name: Borderline Theory Shorts
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "Topic for today's short"
+        required: true
+        type: string
+      voice:
+        description: "Gemini TTS voice name"
+        required: false
+        default: "Sadachbia"
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout animated
+        uses: actions/checkout@v4
+
+      - name: Checkout ytci (private)
+        uses: actions/checkout@v4
+        with:
+          repository: prkpushp/ytci
+          token: ${{ secrets.CROSS_REPO_PAT }}
+          path: ytci
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: ytci/scripts/requirements.txt
+
+      - name: Auth to Google Cloud (service account JSON)
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
+          create_credentials_file: true
+          export_environment_variables: true
+          # This action exports GOOGLE_APPLICATION_CREDENTIALS when create_credentials_file=true. [web:16]
+
+      - name: System dependencies (ffmpeg + fonts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ytci/scripts/requirements.txt
+
+      - name: Prepare bt workspace
+        run: |
+          mkdir -p bt/input bt/output bt/tmp bt/voiceover bt/generated_frames
+
+      - name: Generate BT JSON (Vertex Gemini)
+        env:
+          LOCATION: us-central1
+          TOPIC: ${{ inputs.topic }}
+        run: |
+          set -euo pipefail
+          export PROJECT_ID="$(jq -r .project_id < "${{ env.GOOGLE_APPLICATION_CREDENTIALS }}")"
+
+          PROMPT=$'Role: You are the lead geopolitical strategist and scriptwriter for the YouTube channel "Borderline Theory".\nTask: Create a high-impact, 50-second (approx. 140 words) voiceover script for a given topic.\nInstructions:\nNews Highlight: Briefly state the core fact or event (What happened).\nInteractive Script Content: Write a bold, analytical, and fiercely patriotic script in Devnagri Script.\nInteractivity: You must include at least one thought-provoking question or a call for opinion directed at the viewers during the script (e.g., "आपको क्या लगता है?", "क्या भारत को झुकना चाहिए?").\nTone: "Hard View"—unapologetically India-first, focusing on strategic autonomy and national power.\nOutput Format: Respond STRICTLY in JSON format only. No other text.\nJSON Structure:\n{\n  "TOPIC": "[Insert Topic Name]",\n  "news_highlight": "[A brief summary of the news/event]",\n  "script_content": "[140-word interactive, strategic script in Devnagri Script]"\n}\n\nTopic: '"$TOPIC"$'\n'
+
+          jq -n --arg text "$PROMPT" '{
+            contents: [{ role: "user", parts: [{ text: $text }] }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 512 }
+          }' > bt/tmp/gemini_req.json
+
+          API="https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/gemini-2.0-flash-001:generateContent"
+
+          curl -sS -X POST \
+            -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+            -H "Content-Type: application/json" \
+            "$API" \
+            -d @bt/tmp/gemini_req.json \
+            > bt/tmp/gemini_resp.json
+
+          if jq -e '.error' >/dev/null 2>&1 < bt/tmp/gemini_resp.json; then
+            jq -r '.error | {code, message, status}' bt/tmp/gemini_resp.json
+            cat bt/tmp/gemini_resp.json
+            exit 1
+          fi
+
+          RAW="$(jq -r '[.candidates[0].content.parts[].text] | join("")' bt/tmp/gemini_resp.json)"
+          echo "$RAW" > bt/voiceover/bt_raw.txt
+
+          # Extract first JSON object defensively (models sometimes add whitespace/newlines)
+          python - <<'PY'
+          import json, re, pathlib
+          p = pathlib.Path("bt/voiceover/bt_raw.txt").read_text(encoding="utf-8").strip()
+          m = re.search(r"\{.*\}", p, flags=re.S)
+          if not m:
+              raise SystemExit("No JSON object found in model output")
+          data = json.loads(m.group(0))
+          pathlib.Path("bt/voiceover/bt.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+          print("Wrote bt/voiceover/bt.json")
+          PY
+
+      - name: BT script_content -> WAV (Cloud TTS)
+        shell: bash
+        env:
+          PROJECT_ID: ${{ env.GOOGLE_CLOUD_PROJECT }}
+          MODEL_NAME: gemini-2.5-pro-preview-tts
+          VOICE_NAME: ${{ inputs.voice }}
+        run: |
+          set -euo pipefail
+          chmod +x ytci/scripts/tts.sh
+          TEXT="$(jq -r '.script_content' bt/voiceover/bt.json)"
+          ytci/scripts/tts.sh "$TEXT" bt/input/voiceover.wav
+
+      - name: Pick audio from bt/input/
+        shell: bash
+        run: |
+          AUDIO_FILE="$(find bt/input -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) | sort | head -n 1)"
+          test -n "$AUDIO_FILE"
+          echo "MP3_FILE=$AUDIO_FILE" >> "$GITHUB_ENV"
+
+      - name: Speed up audio 1.25x (ffmpeg)
+        shell: bash
+        run: |
+          set -euo pipefail
+          IN_FILE="${MP3_FILE}"
+          OUT_FILE="bt/tmp/voiceover_1.25x.mp3"
+          ffmpeg -y -i "$IN_FILE" -filter:a "atempo=1.25" -vn -c:a libmp3lame -q:a 2 "$OUT_FILE"
+          echo "MP3_FILE=$OUT_FILE" >> "$GITHUB_ENV"
+
+      - name: Run generator (ytci code, bt workspace)
+        env:
+          LOCATION: us-central1
+          CHANNEL_NAME: Borderline Theory
+          WORK_DIR: bt
+          FRAMES_DIR: bt/generated_frames
+          OUTPUT_DIR: bt/output
+          BT_JSON_PATH: bt/voiceover/bt.json
+          # MP3_FILE is already in env from previous steps
+          ASPECT_RATIO: "9:16"
+          IMAGE_DURATION: "5"
+        run: |
+          python ytci/scripts/generate_shorts.py
+
+      - name: Upload outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: bt-output-run${{ github.run_id }}
+          if-no-files-found: error
+          path: |
+            bt/output/*.mp4
+            bt/output/*.json
+            bt/input/*
+            bt/voiceover/*
