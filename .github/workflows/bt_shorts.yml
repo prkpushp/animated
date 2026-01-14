@@ -9,15 +9,17 @@ on:
         type: string
   push:
     paths:
-      - "bt/*.mp3"
-      - "bt/*.wav"
-      - "bt/*.txt"
+      - "${{ env.YT_DIR }}/*.mp3"
+      - "${{ env.YT_DIR }}/*.wav"
+      - "${{ env.YT_DIR }}/*.txt"
   schedule:
     - cron: "0 21 * * *"   # 19:00 UTC = 00:30 IST
     
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      YT_DIR: bt
     permissions:
       contents: read
 
@@ -32,9 +34,9 @@ jobs:
       
           MODE="dispatch"
           if [[ "${{ github.event_name }}" == "push" ]]; then
-            if ls -1 bt/*.txt >/dev/null 2>&1; then
+            if ls -1 ${{ env.YT_DIR }}/*.txt >/dev/null 2>&1; then
               MODE="bt_txt"
-            elif ls -1 bt/*.mp3 bt/*.wav bt/*.m4a bt/*.mpeg >/dev/null 2>&1; then
+            elif ls -1 ${{ env.YT_DIR }}/*.mp3 ${{ env.YT_DIR }}/*.wav ${{ env.YT_DIR }}/*.m4a ${{ env.YT_DIR }}/*.mpeg >/dev/null 2>&1; then
               MODE="bt_audio"
             else
               MODE="push_unknown"
@@ -66,8 +68,8 @@ jobs:
       - name: Validate channel config JSON
         run: |
           set -euo pipefail
-          jq -e . ytci/bt/input.json >/dev/null
-          echo "✅ ytci/bt/input.json is valid JSON"
+          jq -e . ytci/${{ env.YT_DIR }}/input.json >/dev/null
+          echo "✅ ytci/${{ env.YT_DIR }}/input.json is valid JSON"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -102,7 +104,7 @@ jobs:
 
       - name: Prepare bt workspace
         run: |
-          mkdir -p bt/input bt/output bt/tmp bt/voiceover bt/generated_frames
+          mkdir -p ${{ env.YT_DIR }}/input ${{ env.YT_DIR }}/output ${{ env.YT_DIR }}/tmp ${{ env.YT_DIR }}/voiceover ${{ env.YT_DIR }}/generated_frames
 
       - name: Generate BT JSON (Vertex Gemini)
         if: env.INPUT_MODE != 'bt_txt' && env.INPUT_MODE != 'bt_audio'
@@ -118,7 +120,7 @@ jobs:
           jq -n --arg text "$PROMPT" '{
             contents: [{ role: "user", parts: [{ text: $text }] }],
             generationConfig: { temperature: 0.7, maxOutputTokens: 512 }
-          }' > bt/tmp/gemini_req.json
+          }' > ${{ env.YT_DIR }}/tmp/gemini_req.json
 
           API="https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/gemini-2.0-flash-001:generateContent"
 
@@ -126,27 +128,27 @@ jobs:
             -H "Authorization: Bearer $(gcloud auth print-access-token)" \
             -H "Content-Type: application/json" \
             "$API" \
-            -d @bt/tmp/gemini_req.json \
-            > bt/tmp/gemini_resp.json
+            -d @${{ env.YT_DIR }}/tmp/gemini_req.json \
+            > ${{ env.YT_DIR }}/tmp/gemini_resp.json
 
-          if jq -e '.error' >/dev/null 2>&1 < bt/tmp/gemini_resp.json; then
-            jq -r '.error | {code, message, status}' bt/tmp/gemini_resp.json
-            cat bt/tmp/gemini_resp.json
+          if jq -e '.error' >/dev/null 2>&1 < ${{ env.YT_DIR }}/tmp/gemini_resp.json; then
+            jq -r '.error | {code, message, status}' ${{ env.YT_DIR }}/tmp/gemini_resp.json
+            cat ${{ env.YT_DIR }}/tmp/gemini_resp.json
             exit 1
           fi
 
-          RAW="$(jq -r '[.candidates[0].content.parts[].text] | join("")' bt/tmp/gemini_resp.json)"
-          echo "$RAW" > bt/voiceover/bt_raw.txt
+          RAW="$(jq -r '[.candidates[0].content.parts[].text] | join("")' ${{ env.YT_DIR }}/tmp/gemini_resp.json)"
+          echo "$RAW" > ${{ env.YT_DIR }}/voiceover/bt_raw.txt
 
           python - <<'PY'
           import json, re, pathlib
-          p = pathlib.Path("bt/voiceover/bt_raw.txt").read_text(encoding="utf-8").strip()
+          p = pathlib.Path("${{ env.YT_DIR }}/voiceover/bt_raw.txt").read_text(encoding="utf-8").strip()
           m = re.search(r"\{.*\}", p, flags=re.S)
           if not m:
               raise SystemExit("No JSON object found in model output")
           data = json.loads(m.group(0))
-          pathlib.Path("bt/voiceover/bt.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-          print("Wrote bt/voiceover/bt.json")
+          pathlib.Path("${{ env.YT_DIR }}/voiceover/bt.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+          print("Wrote ${{ env.YT_DIR }}/voiceover/bt.json")
           PY
 
       - name: BT script_content -> WAV (TTS via ytci tts.sh + input.json)
@@ -154,33 +156,33 @@ jobs:
         shell: bash
         env:
           PROJECT_ID: ${{ env.PROJECT_ID }}
-          CHANNEL_CONFIG: ytci/bt/input.json
+          CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
         run: |
           set -euo pipefail
-          mkdir -p bt/input
+          mkdir -p ${{ env.YT_DIR }}/input
           chmod +x ytci/scripts/tts.sh
       
           if [[ "${INPUT_MODE}" == "bt_txt" ]]; then
-            TXT_FILE="$(ls -1 bt/*.txt | head -n 1)"
+            TXT_FILE="$(ls -1 ${{ env.YT_DIR }}/*.txt | head -n 1)"
             echo "Using bt txt: $TXT_FILE"
             TEXT="$(cat "$TXT_FILE")"
           else
-            TEXT="$(jq -r '.script_content' bt/voiceover/bt.json)"
+            TEXT="$(jq -r '.script_content' ${{ env.YT_DIR }}/voiceover/bt.json)"
           fi
       
-          ytci/scripts/tts.sh "$TEXT" bt/input/voiceover.wav
+          ytci/scripts/tts.sh "$TEXT" ${{ env.YT_DIR }}/input/voiceover.wav
 
 
       - name: Pick audio file
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p bt/input
+          mkdir -p ${{ env.YT_DIR }}/input
       
           if [[ "${INPUT_MODE}" == "bt_audio" ]]; then
             AUDIO_FILE="$(find bt -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) | sort | head -n 1)"
           else
-            AUDIO_FILE="$(find bt/input -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) | sort | head -n 1)"
+            AUDIO_FILE="$(find ${{ env.YT_DIR }}/input -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) | sort | head -n 1)"
           fi
       
           test -n "${AUDIO_FILE:-}"
@@ -199,14 +201,14 @@ jobs:
           FILTER="atempo=${SPEED}"
       
           IN_FILE="${MP3_FILE}"
-          mkdir -p bt/tmp
+          mkdir -p ${{ env.YT_DIR }}/tmp
       
           EXT="${IN_FILE##*.}"
           EXT_LC="$(echo "$EXT" | tr '[:upper:]' '[:lower:]')"
           BASE="$(basename "$IN_FILE")"
           STEM="${BASE%.*}"
       
-          OUT_FILE="bt/tmp/${STEM}_${SPEED}x.${EXT_LC}"
+          OUT_FILE="${{ env.YT_DIR }}/tmp/${STEM}_${SPEED}x.${EXT_LC}"
       
           case "$EXT_LC" in
             wav)
@@ -226,7 +228,7 @@ jobs:
               ;;
             *)
               echo "Unknown extension .$EXT_LC; defaulting to mp3 output."
-              OUT_FILE="bt/tmp/${STEM}_${SPEED}x.mp3"
+              OUT_FILE="${{ env.YT_DIR }}/tmp/${STEM}_${SPEED}x.mp3"
               ffmpeg -y -i "$IN_FILE" -filter:a "$FILTER" -vn -c:a libmp3lame -q:a 2 "$OUT_FILE"
               ;;
           esac
@@ -240,11 +242,11 @@ jobs:
         env:
           LOCATION: us-central1
           CHANNEL_NAME: Borderline Theory
-          CHANNEL_CONFIG: ytci/bt/input.json
+          CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
           WORK_DIR: bt
-          FRAMES_DIR: bt/generated_frames
-          OUTPUT_DIR: bt/output
-          BT_JSON_PATH: bt/voiceover/bt.json
+          FRAMES_DIR: ${{ env.YT_DIR }}/generated_frames
+          OUTPUT_DIR: ${{ env.YT_DIR }}/output
+          BT_JSON_PATH: ${{ env.YT_DIR }}/voiceover/bt.json
         run: |
           python ytci/scripts/generate_shorts.py
 
@@ -254,16 +256,16 @@ jobs:
           name: bt-output-run${{ github.run_id }}
           if-no-files-found: error
           path: |
-            bt/output/*.mp4
-            bt/output/*.json
-            bt/input/*
-            bt/voiceover/*
+            ${{ env.YT_DIR }}/output/*.mp4
+            ${{ env.YT_DIR }}/output/*.json
+            ${{ env.YT_DIR }}/input/*
+            ${{ env.YT_DIR }}/voiceover/*
             
       - name: Write run ID to repo
         env:
           GH_TOKEN: ${{ secrets.CROSS_REPO_PAT }}
           RUN_ID: ${{ github.run_id }}
-          CHANNEL_CONFIG: ytci/bt/input.json
+          CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
         run: |
           set -euo pipefail
           TARGET_REPO="$(jq -r '.run_id_writer.repo' "$CHANNEL_CONFIG")"
