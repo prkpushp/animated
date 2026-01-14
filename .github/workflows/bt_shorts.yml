@@ -113,11 +113,15 @@ jobs:
           LOCATION: us-central1
           TOPIC: ${{ env.TOPIC }}
           PROJECT_ID: ${{ env.PROJECT_ID }}
+          CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
         run: |
           set -euo pipefail
-
-          PROMPT=$'Role: You are the Lead Geopolitical Strategist and Scriptwriter for the YouTube channel "Borderline Theory".\nTask: Create a high-impact, 50-second (approx. 140 words) voiceover script.\nInstructions:\n1. News Highlight: Briefly state the core factual event (What happened).\n2. Interactive Script Content: Write a bold, analytical, and fiercely patriotic script in Devnagri Script.\n3. Interactivity: You must include at least one thought-provoking question or a call for opinion directed at viewers (e.g., "आपकी क्या राय है?", "क्या भारत को झुकना चाहिए?").\n4. Tone: "Hard View"—unapologetically India-first, focusing on strategic autonomy and national power.\nOutput Format: Respond STRICTLY in JSON format only. No other text.\nJSON Structure:\n{\n  "TOPIC": "[Insert Topic Name]",\n  "news_highlight": "[A brief summary of the news/event]",\n  "script_content": "[140-word interactive, strategic script in Devnagri Script]"\n}\n\nTopic: '"$TOPIC"$'\n'
-
+          TEMPLATE="$(jq -r '.gemini.prompt_template' "$CHANNEL_CONFIG")"
+          if [[ -z "${TEMPLATE//[[:space:]]/}" || "$TEMPLATE" == "null" ]]; then
+            echo "Missing .gemini.prompt_template in $CHANNEL_CONFIG"
+            exit 1
+          fi
+          PROMPT="${TEMPLATE//\{\{TOPIC\}\}/$TOPIC}"
           jq -n --arg text "$PROMPT" '{
             contents: [{ role: "user", parts: [{ text: $text }] }],
             generationConfig: { temperature: 0.7, maxOutputTokens: 512 }
