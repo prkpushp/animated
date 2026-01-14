@@ -1,228 +1,187 @@
-name: Upload BT Shorts
+name: BT Shorts
 
 on:
-  push:
-    paths:
-      - input-trigger.txt
   workflow_dispatch:
     inputs:
-      run_id:
-        description: "Run ID (optional). If empty, latest successful run is used."
-        required: false
+      topic:
+        description: "Topic for today's short"
+        required: true
         type: string
 
-permissions:
-  contents: write
-
 jobs:
-  upload-to-youtube:
+  build:
     runs-on: ubuntu-latest
-
-    env:
-      SOURCE_OWNER: prkpushp
-      SOURCE_REPO: animated
-      SOURCE_WORKFLOW_NAME: '^BT Shorts$'
-
-      YTCI_OWNER: prkpushp
-      YTCI_REPO: ytci
-      YTCI_REF: main
-
-      CHANNEL_CONFIG_PATH: ytci/bt/input.json
-
-      CLIENT_SECRETS: ytci/scripts/client_secret.json
-      TOKEN_PICKLE: token.pickle
+    permissions:
+      contents: read
 
     steps:
-      - name: Checkout borderlinetheory repo
+      - name: Checkout animated
         uses: actions/checkout@v4
 
       - name: Checkout ytci (private)
         uses: actions/checkout@v4
         with:
-          repository: ${{ env.YTCI_OWNER }}/${{ env.YTCI_REPO }}
+          repository: prkpushp/ytci
           token: ${{ secrets.CROSS_REPO_PAT }}
-          ref: ${{ env.YTCI_REF }}
           path: ytci
           fetch-depth: 1
-
-      - name: Verify YouTube OAuth files
-        run: |
-          set -euo pipefail
-          test -f "${CLIENT_SECRETS}" || { echo "Missing ${CLIENT_SECRETS}"; exit 1; }
-          test -f "${TOKEN_PICKLE}" || { echo "Missing ${TOKEN_PICKLE} at repo root"; exit 1; }
-
-      - name: Install system tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq unzip
-
-      - name: Get latest successful run ID (BT Shorts)
-        id: get_run
-        env:
-          GH_TOKEN: ${{ secrets.CROSS_REPO_PAT }}
-          INPUT_RUN_ID: ${{ inputs.run_id }}
-        run: |
-          set -euo pipefail
-
-          if [ -n "${INPUT_RUN_ID:-}" ]; then
-            echo "run_id=$INPUT_RUN_ID" >> "$GITHUB_OUTPUT"
-            echo "Using provided run ID: $INPUT_RUN_ID"
-            exit 0
-          fi
-
-          WORKFLOWS_JSON="$(curl -sS \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/${SOURCE_OWNER}/${SOURCE_REPO}/actions/workflows")"
-
-          WF_ID="$(echo "$WORKFLOWS_JSON" | jq -r \
-            --arg RE "$SOURCE_WORKFLOW_NAME" \
-            '.workflows[] | select((.name? // "") | test($RE)) | .id' | head -n 1)"
-
-          if [ -z "${WF_ID:-}" ] || [ "$WF_ID" = "null" ]; then
-            echo "No workflow matched: $SOURCE_WORKFLOW_NAME"
-            echo "$WORKFLOWS_JSON" | jq -r '.workflows[] | [.id,.name,.path] | @tsv'
-            exit 1
-          fi
-
-          RUN_JSON="$(curl -sS \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/${SOURCE_OWNER}/${SOURCE_REPO}/actions/workflows/${WF_ID}/runs?status=success&per_page=1")"
-
-          RUN_ID="$(echo "$RUN_JSON" | jq -r '.workflow_runs[0].id // empty')"
-
-          if [ -z "${RUN_ID:-}" ]; then
-            echo "No successful runs found for workflow_id=$WF_ID"
-            exit 1
-          fi
-
-          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
-          echo "Selected run_id=$RUN_ID"
-
-      - name: Get artifact download URL
-        id: get_artifact
-        env:
-          GH_TOKEN: ${{ secrets.CROSS_REPO_PAT }}
-        run: |
-          set -euo pipefail
-
-          ARTIFACTS_JSON="$(curl -sS \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/${SOURCE_OWNER}/${SOURCE_REPO}/actions/runs/${{ steps.get_run.outputs.run_id }}/artifacts")"
-
-          ARTIFACT_URL="$(echo "$ARTIFACTS_JSON" | jq -r '
-            .artifacts
-            | map(select(.name | startswith("bt-output-")))
-            | sort_by(.created_at)
-            | last
-            | .archive_download_url // empty
-          ')"
-
-          if [ -z "${ARTIFACT_URL:-}" ] || [ "$ARTIFACT_URL" = "null" ]; then
-            echo "No artifact found with prefix bt-output-"
-            echo "$ARTIFACTS_JSON" | jq -r '.artifacts[] | [.name,.created_at] | @tsv' || true
-            exit 1
-          fi
-
-          echo "artifact_url=$ARTIFACT_URL" >> "$GITHUB_OUTPUT"
-
-      - name: Download artifact zip
-        env:
-          GH_TOKEN: ${{ secrets.CROSS_REPO_PAT }}
-        run: |
-          set -euo pipefail
-          curl -L -sS \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -o artifact.zip "${{ steps.get_artifact.outputs.artifact_url }}"
-
-      - name: Unzip artifact
-        run: |
-          set -euo pipefail
-          rm -rf downloaded-artifact
-          mkdir -p downloaded-artifact
-          unzip -o artifact.zip -d downloaded-artifact
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: ytci/scripts/requirements.txt
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install google-auth google-auth-oauthlib google-api-python-client pytz
+      - name: Auth to Google Cloud (service account JSON)
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
+          create_credentials_file: true
+          export_environment_variables: true
 
-      - name: Upload all BT shorts
-        env:
-          CHANNEL_CONFIG: ${{ env.CHANNEL_CONFIG_PATH }}
+      - name: Verify Google Cloud authentication
         run: |
           set -euo pipefail
-          touch uploaded.log
+          gcloud auth list
+          export PROJECT_ID="$(jq -r .project_id < "${{ env.GOOGLE_APPLICATION_CREDENTIALS }}")"
+          echo "PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
 
-          SCHEDULE_TIME="$(jq -r '.youtube.schedule_time // "1400"' "$CHANNEL_CONFIG")"
-          DAYS_AHEAD="$(jq -r '.youtube.days_ahead // 0' "$CHANNEL_CONFIG")"
-          PRIVACY="$(jq -r '.youtube.privacy_status // "private"' "$CHANNEL_CONFIG")"
-          STEP_SECONDS="$(jq -r '.youtube.schedule_step_seconds // 300' "$CHANNEL_CONFIG")"
+      - name: System dependencies (ffmpeg + fonts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core jq
 
-          # HHMM <-> minutes helpers
-          to_minutes() { echo $((10#$1 / 100 * 60 + 10#$1 % 100)); }
-          to_hhmm() { printf "%04d" $(( ($1/60)*100 + ($1%60) )); }
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ytci/scripts/requirements.txt
 
-          mapfile -t MP4S < <(find downloaded-artifact -type f -name "youtube_shorts_*.mp4" | sort)
-          if [ "${#MP4S[@]}" -eq 0 ]; then
-            echo "No youtube_shorts_*.mp4 found"
+      - name: Prepare bt workspace
+        run: |
+          mkdir -p bt/input bt/output bt/tmp bt/voiceover bt/generated_frames
+
+      - name: Generate BT JSON (Vertex Gemini)
+        env:
+          LOCATION: us-central1
+          TOPIC: ${{ inputs.topic }}
+          PROJECT_ID: ${{ env.PROJECT_ID }}
+        run: |
+          set -euo pipefail
+
+          PROMPT=$'Role: You are the lead geopolitical strategist and scriptwriter for the YouTube channel "Borderline Theory".\nTask: Create a high-impact, 50-second (approx. 140 words) voiceover script for a given topic.\nInstructions:\nNews Highlight: Briefly state the core fact or event (What happened).\nInteractive Script Content: Write a bold, analytical, and fiercely patriotic script in Devnagri Script.\nInteractivity: You must include at least one thought-provoking question or a call for opinion directed at the viewers during the script (e.g., "आपको क्या लगता है?", "क्या भारत को झुकना चाहिए?").\nTone: "Hard View"—unapologetically India-first, focusing on strategic autonomy and national power.\nOutput Format: Respond STRICTLY in JSON format only. No other text.\nJSON Structure:\n{\n  "TOPIC": "[Insert Topic Name]",\n  "news_highlight": "[A brief summary of the news/event]",\n  "script_content": "[140-word interactive, strategic script in Devnagri Script]"\n}\n\nTopic: '"$TOPIC"$'\n'
+
+          jq -n --arg text "$PROMPT" '{
+            contents: [{ role: "user", parts: [{ text: $text }] }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 512 }
+          }' > bt/tmp/gemini_req.json
+
+          API="https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/gemini-2.0-flash-001:generateContent"
+
+          curl -sS -X POST \
+            -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+            -H "Content-Type: application/json" \
+            "$API" \
+            -d @bt/tmp/gemini_req.json \
+            > bt/tmp/gemini_resp.json
+
+          if jq -e '.error' >/dev/null 2>&1 < bt/tmp/gemini_resp.json; then
+            jq -r '.error | {code, message, status}' bt/tmp/gemini_resp.json
+            cat bt/tmp/gemini_resp.json
             exit 1
           fi
 
-          CUR_MIN="$(to_minutes "$SCHEDULE_TIME")"
+          RAW="$(jq -r '[.candidates[0].content.parts[].text] | join("")' bt/tmp/gemini_resp.json)"
+          echo "$RAW" > bt/voiceover/bt_raw.txt
 
-          for FILEPATH in "${MP4S[@]}"; do
-            BASENAME="$(basename "$FILEPATH")"
-            STEM="${BASENAME%.mp4}"
+          python - <<'PY'
+          import json, re, pathlib
+          p = pathlib.Path("bt/voiceover/bt_raw.txt").read_text(encoding="utf-8").strip()
+          m = re.search(r"\{.*\}", p, flags=re.S)
+          if not m:
+              raise SystemExit("No JSON object found in model output")
+          data = json.loads(m.group(0))
+          pathlib.Path("bt/voiceover/bt.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+          print("Wrote bt/voiceover/bt.json")
+          PY
 
-            if grep -qx "$BASENAME" uploaded.log; then
-              echo "Already uploaded: $BASENAME"
-              continue
-            fi
-
-            META_STEM="${STEM/youtube_shorts_/youtube_metadata_}"
-            META="$(find downloaded-artifact -type f -name "${META_STEM}.json" | head -n 1 || true)"
-            if [ -z "${META:-}" ]; then
-              echo "No metadata json for $BASENAME"
-              exit 1
-            fi
-
-            TITLE="$(jq -r '.title // ""' "$META")"
-            DESC="$(jq -r '.description // ""' "$META")"
-            TAGS="$(jq -r '.hashtags // [] | join(" ")' "$META")"
-            DESCRIPTION="${DESC} ${TAGS}"
-
-            THIS_HHMM="$(to_hhmm "$CUR_MIN")"
-
-            python ytci/scripts/upload_youtube.py \
-              --video "$FILEPATH" \
-              --title "$TITLE" \
-              --description "$DESCRIPTION" \
-              --privacy "$PRIVACY" \
-              --schedule_hhmm "$THIS_HHMM" \
-              --days_ahead "$DAYS_AHEAD" \
-              --client_secrets "${CLIENT_SECRETS}" \
-              --token_pickle "${TOKEN_PICKLE}" \
-              --channel_config "${CHANNEL_CONFIG}"
-
-            echo "$BASENAME" >> uploaded.log
-
-            CUR_MIN=$((CUR_MIN + STEP_SECONDS/60))
-          done
-
-      - name: Commit and push uploaded.log
+      - name: BT script_content -> WAV (TTS via ytci tts.sh + input.json)
+        shell: bash
+        env:
+          PROJECT_ID: ${{ env.PROJECT_ID }}
+          CHANNEL_CONFIG: ytci/bt/input.json
         run: |
           set -euo pipefail
-          git config --global user.name "github-actions"
-          git config --global user.email "actions@github.com"
-          git add uploaded.log
-          git commit -m "Update uploaded.log" || echo "No changes to commit"
-          git push origin main
+          chmod +x ytci/scripts/tts.sh
+          TEXT="$(jq -r '.script_content' bt/voiceover/bt.json)"
+          ytci/scripts/tts.sh "$TEXT" bt/input/voiceover.wav
+
+      - name: Pick audio from bt/input/
+        shell: bash
+        run: |
+          AUDIO_FILE="$(find bt/input -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) | sort | head -n 1)"
+          test -n "$AUDIO_FILE"
+          echo "MP3_FILE=$AUDIO_FILE" >> "$GITHUB_ENV"
+
+      - name: Speed up audio 1.25x (ffmpeg)
+        shell: bash
+        run: |
+          set -euo pipefail
+          IN_FILE="${MP3_FILE}"
+          OUT_FILE="bt/tmp/voiceover_1.25x.mp3"
+          ffmpeg -y -i "$IN_FILE" -filter:a "atempo=1.25" -vn -c:a libmp3lame -q:a 2 "$OUT_FILE"
+          echo "MP3_FILE=$OUT_FILE" >> "$GITHUB_ENV"
+
+      - name: Run generator (ytci code, bt workspace)
+        env:
+          LOCATION: us-central1
+          CHANNEL_NAME: Borderline Theory
+          CHANNEL_CONFIG: ytci/bt/input.json
+          WORK_DIR: bt
+          FRAMES_DIR: bt/generated_frames
+          OUTPUT_DIR: bt/output
+          BT_JSON_PATH: bt/voiceover/bt.json
+        run: |
+          python ytci/scripts/generate_shorts.py
+
+      - name: Upload outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: bt-output-run${{ github.run_id }}
+          if-no-files-found: error
+          path: |
+            bt/output/*.mp4
+            bt/output/*.json
+            bt/input/*
+            bt/voiceover/*
+            
+      - name: Write run ID to repo
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_PAT }}
+          RUN_ID: ${{ github.run_id }}
+          CHANNEL_CONFIG: ytci/bt/input.json
+        run: |
+          set -euo pipefail
+          TARGET_REPO="$(jq -r '.run_id_writer.repo' "$CHANNEL_CONFIG")"
+          TARGET_BRANCH="$(jq -r '.run_id_writer.branch // "main"' "$CHANNEL_CONFIG")"
+          TARGET_FILE="$(jq -r '.run_id_writer.file_path // "input-trigger.txt"' "$CHANNEL_CONFIG")"
+          ENABLED="$(jq -r '.run_id_writer.enabled // true' "$CHANNEL_CONFIG")"
+          if [[ "$ENABLED" != "true" ]]; then
+            echo "run_id_writer disabled in input.json; skipping."
+            exit 0
+          fi
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -rf _runid_repo
+          git clone --depth 1 --branch "$TARGET_BRANCH" "https://x-access-token:${GH_TOKEN}@github.com/${TARGET_REPO}.git" _runid_repo
+          cd _runid_repo
+          mkdir -p "$(dirname "$TARGET_FILE")" || true
+          echo "Run ID: ${RUN_ID}" >> "$TARGET_FILE"
+          git add "$TARGET_FILE"
+          # Avoid failing when there's nothing new to commit
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "Update input-trigger.txt with run ID ${RUN_ID}"
+          git push origin "$TARGET_BRANCH"
