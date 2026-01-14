@@ -49,7 +49,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
-            echo 'TOPIC=Most trending topic of your choice' >> "$GITHUB_ENV"
+            echo 'TOPIC=Most trending topic of today of your choice' >> "$GITHUB_ENV"
           else
             echo 'TOPIC=${{ inputs.topic }}' >> "$GITHUB_ENV"
           fi
