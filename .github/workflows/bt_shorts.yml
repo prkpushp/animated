@@ -9,9 +9,9 @@ on:
         type: string
   push:
     paths:
-      - "${{ env.YT_DIR }}/*.mp3"
-      - "${{ env.YT_DIR }}/*.wav"
-      - "${{ env.YT_DIR }}/*.txt"
+      - "bt/*.mp3"
+      - "bt/*.wav"
+      - "bt/*.txt"
   schedule:
     - cron: "0 21 * * *"   # 19:00 UTC = 00:30 IST
     
