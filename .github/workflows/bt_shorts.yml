@@ -154,3 +154,34 @@ jobs:
             bt/output/*.json
             bt/input/*
             bt/voiceover/*
+            
+      - name: Write run ID to repo
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_PAT }}
+          RUN_ID: ${{ github.run_id }}
+          CHANNEL_CONFIG: ytci/bt/input.json
+        run: |
+          set -euo pipefail
+          TARGET_REPO="$(jq -r '.run_id_writer.repo' "$CHANNEL_CONFIG")"
+          TARGET_BRANCH="$(jq -r '.run_id_writer.branch // "main"' "$CHANNEL_CONFIG")"
+          TARGET_FILE="$(jq -r '.run_id_writer.file_path // "input-trigger.txt"' "$CHANNEL_CONFIG")"
+          ENABLED="$(jq -r '.run_id_writer.enabled // true' "$CHANNEL_CONFIG")"
+          if [[ "$ENABLED" != "true" ]]; then
+            echo "run_id_writer disabled in input.json; skipping."
+            exit 0
+          fi
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -rf _runid_repo
+          git clone --depth 1 --branch "$TARGET_BRANCH" "https://x-access-token:${GH_TOKEN}@github.com/${TARGET_REPO}.git" _runid_repo
+          cd _runid_repo
+          mkdir -p "$(dirname "$TARGET_FILE")" || true
+          echo "Run ID: ${RUN_ID}" >> "$TARGET_FILE"
+          git add "$TARGET_FILE"
+          # Avoid failing when there's nothing new to commit
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "Update input-trigger.txt with run ID ${RUN_ID}"
+          git push origin "$TARGET_BRANCH"
