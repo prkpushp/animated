@@ -7,7 +7,10 @@ on:
         description: "Topic for today's short"
         required: true
         type: string
-
+  push:
+    paths:
+      - "bt/*.mp3"
+      - "bt/*.wav"
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -17,6 +20,16 @@ jobs:
     steps:
       - name: Checkout animated
         uses: actions/checkout@v4
+
+      - name: Detect external audio mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "EXTERNAL_AUDIO=1" >> "$GITHUB_ENV"
+          else
+            echo "EXTERNAL_AUDIO=0" >> "$GITHUB_ENV"
+          fi
 
       - name: Checkout ytci (private)
         uses: actions/checkout@v4
@@ -68,6 +81,7 @@ jobs:
           mkdir -p bt/input bt/output bt/tmp bt/voiceover bt/generated_frames
 
       - name: Generate BT JSON (Vertex Gemini)
+        if: env.EXTERNAL_AUDIO != '1'
         env:
           LOCATION: us-central1
           TOPIC: ${{ inputs.topic }}
@@ -112,6 +126,7 @@ jobs:
           PY
 
       - name: BT script_content -> WAV (TTS via ytci tts.sh + input.json)
+        if: env.EXTERNAL_AUDIO != '1'
         shell: bash
         env:
           PROJECT_ID: ${{ env.PROJECT_ID }}
@@ -122,21 +137,81 @@ jobs:
           TEXT="$(jq -r '.script_content' bt/voiceover/bt.json)"
           ytci/scripts/tts.sh "$TEXT" bt/input/voiceover.wav
 
-      - name: Pick audio from bt/input/
-        shell: bash
-        run: |
-          AUDIO_FILE="$(find bt/input -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) | sort | head -n 1)"
-          test -n "$AUDIO_FILE"
-          echo "MP3_FILE=$AUDIO_FILE" >> "$GITHUB_ENV"
-
-      - name: Speed up audio 1.25x (ffmpeg)
+      - name: Pick audio file
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p bt/input
+      
+          if [[ "${EXTERNAL_AUDIO}" == "1" ]]; then
+            # Audio uploaded directly into bt/
+            AUDIO_FILE="$(find bt -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) | sort | head -n 1)"
+            if [ -z "$AUDIO_FILE" ]; then
+              echo "No audio found in bt/"
+              exit 1
+            fi
+            # Use it directly (or copy into bt/input if you prefer)
+            echo "MP3_FILE=$AUDIO_FILE" >> "$GITHUB_ENV"
+            echo "Using external audio: $AUDIO_FILE"
+          else
+            # Audio produced by TTS step into bt/input (same as your current flow)
+            AUDIO_FILE="$(find bt/input -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) | sort | head -n 1)"
+            if [ -z "$AUDIO_FILE" ]; then
+              echo "No audio found in bt/input/"
+              exit 1
+            fi
+            echo "MP3_FILE=$AUDIO_FILE" >> "$GITHUB_ENV"
+            echo "Using generated audio: $AUDIO_FILE"
+          fi
+
+
+      - name: Speed up audio (ffmpeg, keep extension)
+        shell: bash
+        env:
+          AUDIO_SPEED: "1.25"   # change this when needed
+        run: |
+          set -euo pipefail
+      
+          SPEED="${AUDIO_SPEED:-1.25}"
+          FILTER="atempo=${SPEED}"
+      
           IN_FILE="${MP3_FILE}"
-          OUT_FILE="bt/tmp/voiceover_1.25x.mp3"
-          ffmpeg -y -i "$IN_FILE" -filter:a "atempo=1.25" -vn -c:a libmp3lame -q:a 2 "$OUT_FILE"
+          mkdir -p bt/tmp
+      
+          EXT="${IN_FILE##*.}"
+          EXT_LC="$(echo "$EXT" | tr '[:upper:]' '[:lower:]')"
+          BASE="$(basename "$IN_FILE")"
+          STEM="${BASE%.*}"
+      
+          OUT_FILE="bt/tmp/${STEM}_${SPEED}x.${EXT_LC}"
+      
+          case "$EXT_LC" in
+            wav)
+              ffmpeg -y -i "$IN_FILE" -filter:a "$FILTER" -vn -c:a pcm_s16le "$OUT_FILE"
+              ;;
+            mp3)
+              ffmpeg -y -i "$IN_FILE" -filter:a "$FILTER" -vn -c:a libmp3lame -q:a 2 "$OUT_FILE"
+              ;;
+            m4a|mp4)
+              ffmpeg -y -i "$IN_FILE" -filter:a "$FILTER" -vn -c:a aac -b:a 192k "$OUT_FILE"
+              ;;
+            aac)
+              ffmpeg -y -i "$IN_FILE" -filter:a "$FILTER" -vn -c:a aac -b:a 192k -f adts "$OUT_FILE"
+              ;;
+            mpeg|mpg)
+              ffmpeg -y -i "$IN_FILE" -filter:a "$FILTER" -vn -c:a mp2 -b:a 192k "$OUT_FILE"
+              ;;
+            *)
+              echo "Unknown extension .$EXT_LC; defaulting to mp3 output."
+              OUT_FILE="bt/tmp/${STEM}_${SPEED}x.mp3"
+              ffmpeg -y -i "$IN_FILE" -filter:a "$FILTER" -vn -c:a libmp3lame -q:a 2 "$OUT_FILE"
+              ;;
+          esac
+      
           echo "MP3_FILE=$OUT_FILE" >> "$GITHUB_ENV"
+          ls -lh "$OUT_FILE"
+      
+
 
       - name: Run generator (ytci code, bt workspace)
         env:
