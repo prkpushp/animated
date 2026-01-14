@@ -7,11 +7,6 @@ on:
         description: "Topic for today's short"
         required: true
         type: string
-      voice:
-        description: "Gemini TTS voice name"
-        required: false
-        default: "Sadachbia"
-        type: string
 
 jobs:
   build:
@@ -44,12 +39,18 @@ jobs:
           credentials_json: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
           create_credentials_file: true
           export_environment_variables: true
-          # This action exports GOOGLE_APPLICATION_CREDENTIALS when create_credentials_file=true. [web:16]
+
+      - name: Verify Google Cloud authentication
+        run: |
+          set -euo pipefail
+          gcloud auth list
+          export PROJECT_ID="$(jq -r .project_id < "${{ env.GOOGLE_APPLICATION_CREDENTIALS }}")"
+          echo "PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
 
       - name: System dependencies (ffmpeg + fonts)
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg fonts-dejavu-core
+          sudo apt-get install -y ffmpeg fonts-dejavu-core jq
 
       - name: Install Python dependencies
         run: |
@@ -64,9 +65,9 @@ jobs:
         env:
           LOCATION: us-central1
           TOPIC: ${{ inputs.topic }}
+          PROJECT_ID: ${{ env.PROJECT_ID }}
         run: |
           set -euo pipefail
-          export PROJECT_ID="$(jq -r .project_id < "${{ env.GOOGLE_APPLICATION_CREDENTIALS }}")"
 
           PROMPT=$'Role: You are the lead geopolitical strategist and scriptwriter for the YouTube channel "Borderline Theory".\nTask: Create a high-impact, 25-second (approx. 70 words) voiceover script for a given topic.\nInstructions:\nNews Highlight: Briefly state the core fact or event (What happened).\nInteractive Script Content: Write a bold, analytical, and fiercely patriotic script in Devnagri Script.\nInteractivity: You must include at least one thought-provoking question or a call for opinion directed at the viewers during the script (e.g., "आपको क्या लगता है?", "क्या भारत को झुकना चाहिए?").\nTone: "Hard View"—unapologetically India-first, focusing on strategic autonomy and national power.\nOutput Format: Respond STRICTLY in JSON format only. No other text.\nJSON Structure:\n{\n  "TOPIC": "[Insert Topic Name]",\n  "news_highlight": "[A brief summary of the news/event]",\n  "script_content": "[70-word interactive, strategic script in Devnagri Script]"\n}\n\nTopic: '"$TOPIC"$'\n'
 
@@ -93,7 +94,6 @@ jobs:
           RAW="$(jq -r '[.candidates[0].content.parts[].text] | join("")' bt/tmp/gemini_resp.json)"
           echo "$RAW" > bt/voiceover/bt_raw.txt
 
-          # Extract first JSON object defensively (models sometimes add whitespace/newlines)
           python - <<'PY'
           import json, re, pathlib
           p = pathlib.Path("bt/voiceover/bt_raw.txt").read_text(encoding="utf-8").strip()
@@ -105,12 +105,11 @@ jobs:
           print("Wrote bt/voiceover/bt.json")
           PY
 
-      - name: BT script_content -> WAV (Cloud TTS)
+      - name: BT script_content -> WAV (TTS via ytci tts.sh + input.json)
         shell: bash
         env:
-          PROJECT_ID: ${{ env.GOOGLE_CLOUD_PROJECT }}
-          MODEL_NAME: gemini-2.5-pro-preview-tts
-          VOICE_NAME: ${{ inputs.voice }}
+          PROJECT_ID: ${{ env.PROJECT_ID }}
+          CHANNEL_CONFIG: ytci/bt/input.json
         run: |
           set -euo pipefail
           chmod +x ytci/scripts/tts.sh
@@ -137,13 +136,11 @@ jobs:
         env:
           LOCATION: us-central1
           CHANNEL_NAME: Borderline Theory
+          CHANNEL_CONFIG: ytci/bt/input.json
           WORK_DIR: bt
           FRAMES_DIR: bt/generated_frames
           OUTPUT_DIR: bt/output
           BT_JSON_PATH: bt/voiceover/bt.json
-          # MP3_FILE is already in env from previous steps
-          ASPECT_RATIO: "9:16"
-          IMAGE_DURATION: "5"
         run: |
           python ytci/scripts/generate_shorts.py
 
