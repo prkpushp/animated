@@ -13,7 +13,7 @@ on:
       - "bt/*.wav"
       - "bt/*.txt"
   schedule:
-    - cron: "0 21 * * *"   # 19:00 UTC = 00:30 IST
+    - cron: "0 19 * * *"   # 19:00 UTC = 00:30 IST
     
 jobs:
   build:
