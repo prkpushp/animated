@@ -1,4 +1,4 @@
-name: Borderline Theory Shorts
+name: BT Shorts
 
 on:
   workflow_dispatch:
