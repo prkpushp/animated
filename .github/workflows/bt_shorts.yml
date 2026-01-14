@@ -26,6 +26,12 @@ jobs:
           path: ytci
           fetch-depth: 1
 
+      - name: Validate channel config JSON
+        run: |
+          set -euo pipefail
+          jq -e . ytci/bt/input.json >/dev/null
+          echo "✅ ytci/bt/input.json is valid JSON"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
