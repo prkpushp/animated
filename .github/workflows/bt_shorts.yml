@@ -31,12 +31,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          shopt -s nullglob
       
           MODE="dispatch"
+      
           if [[ "${{ github.event_name }}" == "push" ]]; then
-            if ls -1 ${{ env.YT_DIR }}/*.txt >/dev/null 2>&1; then
+            TXT_FILES=("$YT_DIR"/*.txt)
+            AUDIO_FILES=("$YT_DIR"/*.mp3 "$YT_DIR"/*.wav "$YT_DIR"/*.m4a "$YT_DIR"/*.mpeg)
+      
+            if (( ${#TXT_FILES[@]} > 0 )); then
               MODE="yt_txt"
-            elif ls -1 ${{ env.YT_DIR }}/*.mp3 ${{ env.YT_DIR }}/*.wav ${{ env.YT_DIR }}/*.m4a ${{ env.YT_DIR }}/*.mpeg >/dev/null 2>&1; then
+            elif (( ${#AUDIO_FILES[@]} > 0 )); then
               MODE="yt_audio"
             else
               MODE="push_unknown"
@@ -45,6 +50,7 @@ jobs:
       
           echo "INPUT_MODE=$MODE" >> "$GITHUB_ENV"
           echo "INPUT_MODE=$MODE"
+
 
       - name: Set topic (dispatch vs schedule)
         shell: bash
