@@ -188,17 +188,33 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p ${{ env.YT_DIR }}/input
+          mkdir -p "$YT_DIR/input"
+      
+          # Helper: pick newest file by mtime (works even if multiple files exist)
+          pick_newest() {
+            # args are find roots
+            find "$@" -maxdepth 1 -type f \
+              \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) \
+              -printf '%T@ %p\n' \
+              | sort -nr \
+              | head -n 1 \
+              | cut -d' ' -f2-
+          }
       
           if [[ "${INPUT_MODE}" == "yt_audio" ]]; then
-            AUDIO_FILE="$(find yt -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) | sort | head -n 1)"
+            AUDIO_FILE="$(pick_newest "$YT_DIR")"
           else
-            AUDIO_FILE="$(find ${{ env.YT_DIR }}/input -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) | sort | head -n 1)"
+            AUDIO_FILE="$(pick_newest "$YT_DIR/input")"
           fi
       
-          test -n "${AUDIO_FILE:-}"
+          if [[ -z "${AUDIO_FILE:-}" ]]; then
+            echo "No audio found (INPUT_MODE=$INPUT_MODE)."
+            exit 1
+          fi
+      
           echo "MP3_FILE=$AUDIO_FILE" >> "$GITHUB_ENV"
           echo "Using audio: $AUDIO_FILE"
+
 
 
       - name: Speed up audio (ffmpeg, keep extension)
