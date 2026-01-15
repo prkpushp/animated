@@ -25,7 +25,7 @@ LOCATION = os.environ.get("LOCATION", "us-central1")
 MP3_FILE = os.environ.get("MP3_FILE")  # workflow sets this (trr/input/*.mp3 or *.mpeg)
 
 IMAGE_DURATION = float(os.environ.get("IMAGE_DURATION", "5"))
-ASPECT_RATIO = os.environ.get("ASPECT_RATIO", "9:16")
+ASPECT_RATIO = os.environ.get("ASPECT_RATIO", "16:9")
 
 CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "The Rogue Report")
 
