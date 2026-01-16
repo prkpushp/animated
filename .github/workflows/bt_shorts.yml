@@ -254,6 +254,7 @@ jobs:
           FRAMES_DIR: ${{ env.YT_DIR }}/generated_frames
           OUTPUT_DIR: ${{ env.YT_DIR }}/output
           YT_JSON_PATH: ${{ env.YT_DIR }}/voiceover/yt.json
+          ASPECT_RATIO: ${{ env.ASPECT_RATIO }}
         run: |
           python ytci/scripts/generate_shorts.py
 
