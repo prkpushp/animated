@@ -234,16 +234,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+      
           IN_FILE="$MP3_FILE"   # already picked earlier
           DUR="$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$IN_FILE")"
+      
           # Compare as float: < 120 sec => 9:16 else 16:9
           if awk "BEGIN{exit !($DUR < 120)}"; then
-            echo "ASPECT_RATIO=9:16" >> "$GITHUB_ENV"
+            ASPECT_RATIO="9:16"
           else
-            echo "ASPECT_RATIO=16:9" >> "$GITHUB_ENV"
+            ASPECT_RATIO="16:9"
           fi
+      
+          # Persist for NEXT steps
+          echo "ASPECT_RATIO=$ASPECT_RATIO" >> "$GITHUB_ENV"   # available to later steps [web:17]
+      
           echo "Audio duration seconds: $DUR"
           echo "Chosen ASPECT_RATIO: $ASPECT_RATIO"
+
 
 
       - name: Run generator (ytci code, workspace)
