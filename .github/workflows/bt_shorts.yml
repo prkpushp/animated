@@ -12,6 +12,7 @@ on:
       - "bt/*.mp3"
       - "bt/*.wav"
       - "bt/*.txt"
+      - "bt/*.m4a"
   schedule:
     - cron: "0 19 * * *"   # 19:00 UTC = 00:30 IST
     
