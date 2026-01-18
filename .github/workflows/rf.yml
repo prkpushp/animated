@@ -282,7 +282,58 @@ jobs:
             ${{ env.YT_DIR }}/output/*.json
             ${{ env.YT_DIR }}/input/*
             ${{ env.YT_DIR }}/voiceover/*
-            
+
+      - name: Load Telegram config from input.json (masked)
+        run: |
+          set -euo pipefail
+          INPUT_JSON="${{ env.YT_DIR }}/input/input.json"
+      
+          TELEGRAM_BOT_TOKEN="$(jq -r '.telegram.bot_token // empty' "$INPUT_JSON")"
+          TELEGRAM_CHAT_ID="$(jq -r '.telegram.chat_id // empty' "$INPUT_JSON")"
+      
+          [ -n "$TELEGRAM_BOT_TOKEN" ] || { echo "telegram.bot_token missing in $INPUT_JSON"; exit 1; }
+          [ -n "$TELEGRAM_CHAT_ID" ] || { echo "telegram.chat_id missing in $INPUT_JSON"; exit 1; }
+      
+          # Mask BEFORE any chance of printing
+          echo "::add-mask::$TELEGRAM_BOT_TOKEN"
+      
+          # Export for next steps
+          echo "TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN" >> "$GITHUB_ENV"
+          echo "TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID" >> "$GITHUB_ENV"
+
+      - name: Send videos to Telegram
+        run: |
+          set -euo pipefail
+          for f in "${{ env.YT_DIR }}/output/"*.mp4; do
+            [ -e "$f" ] || { echo "No mp4 files found"; exit 1; }
+            curl --progress-bar --max-time 600 \
+              -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendVideo" \
+              -F "chat_id=${TELEGRAM_CHAT_ID}" \
+              -F "supports_streaming=true" \
+              -F "video=@${f}" \
+              -F "caption=$(basename "$f")"
+          done
+
+      - name: Send output JSONs to Telegram
+        run: |
+          set -euo pipefail
+          OUT_DIR="${{ env.YT_DIR }}/output"
+      
+          shopt -s nullglob
+          jsons=( "$OUT_DIR"/*.json )
+          if [ ${#jsons[@]} -eq 0 ]; then
+            echo "No JSON files found in $OUT_DIR"
+            exit 0
+          fi
+          for f in "${jsons[@]}"; do
+            echo "Sending JSON: $f"
+            curl --progress-bar --max-time 120 --retry 3 --retry-all-errors \
+              -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+              -F "chat_id=${TELEGRAM_CHAT_ID}" \
+              -F "document=@${f};filename=$(basename "$f")" \
+              -F "caption=$(basename "$f")"
+          done
+                  
       - name: Write run ID to repo
         if: false
         env:
