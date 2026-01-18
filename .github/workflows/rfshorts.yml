@@ -1,12 +1,12 @@
 name: RF Shorts
 
 on:
-  push:
-    paths:
-      - 'rf/input/**/*.mp3'
-      - 'rf/input/**/*.wav'
-      - 'rf/input/**/*.m4a'    
-      - 'rf/input/**/*.mpeg'  
+#  push:
+#    paths:
+#      - 'rf/input/**/*.mp3'
+#      - 'rf/input/**/*.wav'
+#      - 'rf/input/**/*.m4a'    
+#      - 'rf/input/**/*.mpeg'  
   workflow_dispatch:
 
 jobs:
