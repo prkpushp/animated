@@ -269,7 +269,7 @@ jobs:
       - name: Add disclaimer
         run: |
           chmod +x scripts/add_financial_disclaimer.sh
-          ./scripts/add_financial_disclaimer.sh "input.mp4" "output.mp4" #input.mp4 and output.mp4 will be ignore if OUTPUT_DIR presnt
+          ytci/scripts/add_financial_disclaimer.sh "input.mp4" "output.mp4" #input.mp4 and output.mp4 will be ignore if OUTPUT_DIR presnt
 
 
       - name: Upload outputs
