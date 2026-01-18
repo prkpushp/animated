@@ -1,12 +1,12 @@
 name: RF Long Manual
 
 on:
-  push:
-    paths:
-      - 'rf/*.mp3'
-      - 'rf/*.wav'
-      - 'rf/*.m4a'    
-      - 'rf/*.mpeg'  
+#  push:
+#    paths:
+#      - 'rf/*.mp3'
+#      - 'rf/*.wav'
+#      - 'rf/*.m4a'    
+#      - 'rf/*.mpeg'  
   workflow_dispatch:
 
 jobs:
