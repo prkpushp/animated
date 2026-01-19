@@ -276,6 +276,48 @@ jobs:
             ${{ env.YT_DIR }}/output/*.json
             ${{ env.YT_DIR }}/input/*
             ${{ env.YT_DIR }}/voiceover/*
+
+      - name: Load Telegram config from input.json (masked)
+        run: |
+          set -euo pipefail
+          INPUT_JSON="ytci/${{ env.YT_DIR }}/input.json"
+      
+          TELEGRAM_BOT_TOKEN="$(jq -r '.telegram.bot_token // empty' "$INPUT_JSON")"
+          TELEGRAM_CHAT_ID="$(jq -r '.telegram.chat_id // empty' "$INPUT_JSON")"
+      
+          [ -n "$TELEGRAM_BOT_TOKEN" ] || { echo "telegram.bot_token missing in $INPUT_JSON"; exit 1; }
+          [ -n "$TELEGRAM_CHAT_ID" ] || { echo "telegram.chat_id missing in $INPUT_JSON"; exit 1; }
+      
+          # Mask BEFORE any chance of printing
+          echo "::add-mask::$TELEGRAM_BOT_TOKEN"
+      
+          # Export for next steps
+          echo "TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN" >> "$GITHUB_ENV"
+          echo "TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID" >> "$GITHUB_ENV"
+
+      - name: Send videos to Telegram
+        run: |
+          set -euo pipefail
+          for f in "${{ env.YT_DIR }}/output/"*.mp4; do
+            [ -e "$f" ] || { echo "No mp4 files found"; exit 1; }
+            curl --progress-bar --max-time 600 \
+              -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendVideo" \
+              -F "chat_id=${TELEGRAM_CHAT_ID}" \
+              -F "supports_streaming=true" \
+              -F "video=@${f}" \
+              -F "caption=$(basename "$f")"
+          done
+
+
+      - name: Send title/description/hashtags to Telegram
+        run: |
+          set -euo pipefail
+          OUT_DIR="${{ env.YT_DIR }}/output"
+          META_JSON="( "$OUT_DIR"/*.json )"
+          MSG="$(jq -r '.title, "", .description, "", (.hashtags // [] | join(" "))' "$META_JSON")"
+          curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${MSG}" 
             
       - name: Write run ID to repo
         if: false
