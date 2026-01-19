@@ -187,7 +187,7 @@ jobs:
       - name: Speed up audio (ffmpeg, keep extension)
         shell: bash
         env:
-          AUDIO_SPEED: "1.1"   # change this when needed
+          AUDIO_SPEED: "1.15"   # change this when needed
         run: |
           set -euo pipefail
       
