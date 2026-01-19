@@ -9,7 +9,7 @@ on:
         type: string
   push:
     paths:
-      - "kt/*.mp3"
+      - "kt/*.mp4"
       - "kt/*.wav"
       - "kt/*.txt"
       - "kt/*.m4a"
@@ -130,7 +130,7 @@ jobs:
           ytci/scripts/generate_voiceover_json.sh
 
       - name: Script_content -> WAV (TTS via ytci tts.sh + input.json)
-        if: env.INPUT_MODE != 'yt_audio'
+        if: false
         shell: bash
         env:
           PROJECT_ID: ${{ env.PROJECT_ID }}
@@ -161,7 +161,7 @@ jobs:
           pick_newest() {
             # args are find roots
             find "$@" -maxdepth 1 -type f \
-              \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) \
+              \( -iname "*.mp4" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) \
               -printf '%T@ %p\n' \
               | sort -nr \
               | head -n 1 \
@@ -185,6 +185,7 @@ jobs:
 
 
       - name: Speed up audio (ffmpeg, keep extension)
+        if:false
         shell: bash
         env:
           AUDIO_SPEED: "1.1"   # change this when needed
