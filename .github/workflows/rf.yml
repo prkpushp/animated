@@ -286,7 +286,7 @@ jobs:
       - name: Load Telegram config from input.json (masked)
         run: |
           set -euo pipefail
-          INPUT_JSON="${{ env.YT_DIR }}/input/input.json"
+          INPUT_JSON="ytci/${{ env.YT_DIR }}/input.json"
       
           TELEGRAM_BOT_TOKEN="$(jq -r '.telegram.bot_token // empty' "$INPUT_JSON")"
           TELEGRAM_CHAT_ID="$(jq -r '.telegram.chat_id // empty' "$INPUT_JSON")"
