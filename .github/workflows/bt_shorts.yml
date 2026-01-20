@@ -92,6 +92,16 @@ jobs:
           create_credentials_file: true
           export_environment_variables: true
 
+      - name: Set Varaibles from input.json
+        env:
+          CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
+        run: |
+          set -euo pipefail
+          CHANNEL_NAME="$(jq -r '.channel_name // empty' "$CHANNEL_CONFIG")"
+          [ -n "$CHANNEL_NAME" ] || { echo "channel_name missing in $CHANNEL_CONFIG"; exit 1; }
+          echo "CHANNEL_NAME=$CHANNEL_NAME" >> "$GITHUB_ENV"
+
+
       - name: Verify Google Cloud authentication
         run: |
           set -euo pipefail
@@ -256,7 +266,7 @@ jobs:
       - name: Run generator (ytci code, workspace)
         env:
           LOCATION: us-central1
-          CHANNEL_NAME: Borderline Theory
+          CHANNEL_NAME: ${{ env.CHANNEL_NAME }}
           CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
           WORK_DIR: ${{ vars.YT_DIR }}
           FRAMES_DIR: ${{ env.YT_DIR }}/generated_frames
