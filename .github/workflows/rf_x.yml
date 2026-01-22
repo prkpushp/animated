@@ -19,7 +19,7 @@ jobs:
       - name: Checkout ytci repo (private, contains script + token.json)
         uses: actions/checkout@v5
         with:
-          repository: YOUR_ORG_OR_USER/ytci
+          repository: ytci
           token: ${{ secrets.CROSS_REPO_PAT }}
           path: ytci
           # Optional: pull only what you need
