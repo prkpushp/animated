@@ -71,6 +71,8 @@ jobs:
         shell: bash
         env:
           POST_TEXT: ${{ steps.meta.outputs.title }}
+          env:
+          TITLE: ${{ steps.meta.outputs.title }}
           INPUT_VIDEO: ${{ github.workspace }}/${{ steps.files.outputs.mp4 }}
           # If you update the script to accept TOKEN_FILE from env:
           TOKEN_FILE: ${{ github.workspace }}/ytci/rf/x/token.json
