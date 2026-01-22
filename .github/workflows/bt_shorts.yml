@@ -324,7 +324,15 @@ jobs:
           set -euo pipefail
           OUT_DIR="${{ env.YT_DIR }}/output"
           META_JSON=$(ls "$OUT_DIR"/*.json | head -1 )
-          MSG="$(jq -r '.title, "", .description, "", (.hashtags // [] | join(" "))' "$META_JSON")"
+          MSG="$(
+            jq -r '
+              (.hashtags // []) as $h
+              | ($h | join(" "))
+              , ""
+              , ($h | map(ltrimstr("#")) | join(", "))
+            ' "$META_JSON"
+          )"
+
           curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d "chat_id=${TELEGRAM_CHAT_ID}" \
             --data-urlencode "text=${MSG}" 
