@@ -26,6 +26,7 @@ jobs:
           sparse-checkout: |
             scripts
             rf/x/token.json
+            rf/input.json
           sparse-checkout-cone-mode: false
         # Passing token is required for other private repos. [web:2]
 
