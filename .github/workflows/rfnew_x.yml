@@ -1,0 +1,108 @@
+name: Post to X
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Workflow run id (in this repo) that uploaded the artifact (1 mp4 + 1 json)"
+        required: true
+
+concurrency:
+  group: x-token-refresh
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout ytci repo (private, contains script + token.json)
+        uses: actions/checkout@v5
+        with:
+          repository: prkpushp/ytci
+          token: ${{ secrets.CROSS_REPO_PAT }}
+          path: ytci
+          # Optional: pull only what you need
+          sparse-checkout: |
+            scripts
+            rf/x/token.json
+            rf/input.json
+          sparse-checkout-cone-mode: false
+        # Passing token is required for other private repos. [web:2]
+
+      - name: Verify X token.json exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f ytci/rf/x/token.json
+          chmod 600 ytci/rf/x/token.json
+
+      - name: Sanity-check token.json fields
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -r 'keys' ytci/rf/x/token.json
+          jq -r 'has("refresh_token"), has("access_token")' ytci/rf/x/token.json
+
+      - name: Get artifact name for run
+        id: art
+        shell: bash
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts"
+          name="$(curl -sS -H "Accept: application/vnd.github+json" \
+                      -H "Authorization: Bearer ${GH_TOKEN}" \
+                      "$api" | jq -r '.artifacts[0].name // empty')"
+          test -n "$name"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+      
+      - name: Download artifact from run id
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.art.outputs.name }}
+          path: _run_artifact
+          run-id: ${{ inputs.run_id }}
+          repository: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Find mp4 + json inside artifact
+        id: files
+        shell: bash
+        run: |
+          set -euo pipefail
+          MP4="$(find _run_artifact -type f -iname '*.mp4' | head -n 1)"
+          JSON="$(find _run_artifact -type f -iname '*.json' | head -n 1)"
+          test -n "$MP4" && test -f "$MP4"
+          test -n "$JSON" && test -f "$JSON"
+          echo "mp4=$MP4" >> "$GITHUB_OUTPUT"
+          echo "json=$JSON" >> "$GITHUB_OUTPUT"
+
+      - name: Extract title from json
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          TITLE="$(jq -r '.title // empty' "${{ steps.files.outputs.json }}")"
+          test -n "$TITLE"
+          echo "title=$TITLE" >> "$GITHUB_OUTPUT"
+
+      - name: Run post script (tweet text = title)
+        shell: bash
+        env:
+          POST_TEXT: ${{ steps.meta.outputs.title }}
+          TITLE: ${{ steps.meta.outputs.title }}
+          INPUT_VIDEO: ${{ github.workspace }}/${{ steps.files.outputs.mp4 }}
+          # If you update the script to accept TOKEN_FILE from env:
+          TOKEN_FILE: ${{ github.workspace }}/ytci/rf/x/token.json
+        run: |
+          set -euo pipefail
+          cd ytci/scripts
+          bash post_to_x.sh
