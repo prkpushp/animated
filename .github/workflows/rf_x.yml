@@ -7,6 +7,10 @@ on:
         description: "Workflow run id (in this repo) that uploaded the artifact (1 mp4 + 1 json)"
         required: true
 
+concurrency:
+  group: x-token-refresh
+  cancel-in-progress: false
+
 jobs:
   post:
     runs-on: ubuntu-latest
