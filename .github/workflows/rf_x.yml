@@ -36,6 +36,13 @@ jobs:
           test -f ytci/rf/x/token.json
           chmod 600 ytci/rf/x/token.json
 
+      - name: Sanity-check token.json fields
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -r 'keys' ytci/rf/x/token.json
+          jq -r 'has("refresh_token"), has("access_token")' ytci/rf/x/token.json
+
       - name: Get artifact name for run
         id: art
         shell: bash
