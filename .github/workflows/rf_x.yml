@@ -36,11 +36,25 @@ jobs:
           test -f ytci/rf/x/token.json
           chmod 600 ytci/rf/x/token.json
 
-      - name: Download artifact from the provided run id (same repo)
+      - name: Get artifact name for run
+        id: art
+        shell: bash
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts"
+          name="$(curl -sS -H "Accept: application/vnd.github+json" \
+                      -H "Authorization: Bearer ${GH_TOKEN}" \
+                      "$api" | jq -r '.artifacts[0].name // empty')"
+          test -n "$name"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+      
+      - name: Download artifact from run id
         uses: actions/download-artifact@v4
         with:
-          # If your artifact name is constant, hardcode it here:
-          name: youtube-video
+          name: ${{ steps.art.outputs.name }}
           path: _run_artifact
           run-id: ${{ inputs.run_id }}
           repository: ${{ github.repository }}
