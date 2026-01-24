@@ -1,0 +1,320 @@
+name: SPLShorts
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "Topic for today's short"
+        required: true
+        type: string
+  push:
+    paths:
+      - "spl/*.mp3"
+      - "spl/*.wav"
+      - "spl/*.txt"
+      - "spl/*.m4a"
+  schedule:
+    - cron: "30 00 * * *"   # 19:00 UTC = 00:30 IST
+    
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      YT_DIR: spl
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout animated
+        uses: actions/checkout@v4
+
+      - name: Detect input mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+      
+          MODE="dispatch"
+      
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TXT_FILES=("$YT_DIR"/*.txt)
+            AUDIO_FILES=("$YT_DIR"/*.mp3 "$YT_DIR"/*.wav "$YT_DIR"/*.m4a "$YT_DIR"/*.mpeg)
+      
+            if (( ${#TXT_FILES[@]} > 0 )); then
+              MODE="yt_txt"
+            elif (( ${#AUDIO_FILES[@]} > 0 )); then
+              MODE="yt_audio"
+            else
+              MODE="push_unknown"
+            fi
+          fi
+      
+          echo "INPUT_MODE=$MODE" >> "$GITHUB_ENV"
+          echo "INPUT_MODE=$MODE"
+
+
+      - name: Set topic (dispatch vs schedule)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            echo 'TOPIC=Most trending topic of today of your choice' >> "$GITHUB_ENV"
+          else
+            echo 'TOPIC=${{ inputs.topic }}' >> "$GITHUB_ENV"
+          fi
+                
+
+      - name: Checkout ytci (private)
+        uses: actions/checkout@v4
+        with:
+          repository: prkpushp/ytci
+          token: ${{ secrets.CROSS_REPO_PAT }}
+          path: ytci
+          fetch-depth: 1
+
+      - name: Validate channel config JSON
+        run: |
+          set -euo pipefail
+          jq -e . ytci/${{ env.YT_DIR }}/input.json >/dev/null
+          echo "✅ ytci/${{ env.YT_DIR }}/input.json is valid JSON"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: ytci/scripts/requirements.txt
+
+      - name: Auth to Google Cloud (service account JSON)
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
+          create_credentials_file: true
+          export_environment_variables: true
+
+      - name: Set Varaibles from input.json
+        env:
+          CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
+        run: |
+          set -euo pipefail
+          CHANNEL_NAME="$(jq -r '.channel_name // empty' "$CHANNEL_CONFIG")"
+          [ -n "$CHANNEL_NAME" ] || { echo "channel_name missing in $CHANNEL_CONFIG"; exit 1; }
+          echo "CHANNEL_NAME=$CHANNEL_NAME" >> "$GITHUB_ENV"
+
+
+      - name: Verify Google Cloud authentication
+        run: |
+          set -euo pipefail
+          gcloud auth list
+          export PROJECT_ID="$(jq -r .project_id < "${{ env.GOOGLE_APPLICATION_CREDENTIALS }}")"
+          echo "PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
+
+      - name: System dependencies (ffmpeg + fonts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core jq
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ytci/scripts/requirements.txt
+
+      - name: Prepare workspace
+        run: |
+          echo "Preparing workspace: $YT_DIR"
+          mkdir -p ${{ env.YT_DIR }}/input ${{ env.YT_DIR }}/output ${{ env.YT_DIR }}/tmp ${{ env.YT_DIR }}/voiceover ${{ env.YT_DIR }}/generated_frames
+
+      - name: Generate JSON (Vertex Gemini)
+        if: env.INPUT_MODE != 'yt_txt' && env.INPUT_MODE != 'yt_audio'
+        shell: bash
+        env:
+          LOCATION: us-central1
+          PROJECT_ID: ${{ env.PROJECT_ID }}
+          TOPIC: ${{ env.TOPIC }}
+          CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
+          OUT_DIR: ${{ env.YT_DIR }}/voiceover
+          TMP_DIR: ${{ env.YT_DIR }}/tmp
+        run: |
+          set -euo pipefail
+          chmod +x ytci/scripts/generate_voiceover_json.sh
+          ytci/scripts/generate_voiceover_json.sh
+
+      - name: Script_content -> WAV (TTS via ytci tts.sh + input.json)
+        if: env.INPUT_MODE != 'yt_audio'
+        shell: bash
+        env:
+          PROJECT_ID: ${{ env.PROJECT_ID }}
+          CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
+        run: |
+          set -euo pipefail
+          mkdir -p ${{ env.YT_DIR }}/input
+          chmod +x ytci/scripts/tts.sh
+      
+          if [[ "${INPUT_MODE}" == "yt_txt" ]]; then
+            TXT_FILE="$(ls -1 ${{ env.YT_DIR }}/*.txt | head -n 1)"
+            echo "Using yt txt: $TXT_FILE"
+            TEXT="$(cat "$TXT_FILE")"
+          else
+            TEXT="$(jq -r '.script_content' ${{ env.YT_DIR }}/voiceover/yt.json)"
+          fi
+      
+          ytci/scripts/tts.sh "$TEXT" ${{ env.YT_DIR }}/input/voiceover.wav
+
+
+      - name: Pick audio file
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$YT_DIR/input"
+      
+          # Helper: pick newest file by mtime (works even if multiple files exist)
+          pick_newest() {
+            # args are find roots
+            find "$@" -maxdepth 1 -type f \
+              \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) \
+              -printf '%T@ %p\n' \
+              | sort -nr \
+              | head -n 1 \
+              | cut -d' ' -f2-
+          }
+      
+          if [[ "${INPUT_MODE}" == "yt_audio" ]]; then
+            AUDIO_FILE="$(pick_newest "$YT_DIR")"
+          else
+            AUDIO_FILE="$(pick_newest "$YT_DIR/input")"
+          fi
+      
+          if [[ -z "${AUDIO_FILE:-}" ]]; then
+            echo "No audio found (INPUT_MODE=$INPUT_MODE)."
+            exit 1
+          fi
+      
+          echo "MP3_FILE=$AUDIO_FILE" >> "$GITHUB_ENV"
+          echo "Using audio: $AUDIO_FILE"
+
+
+
+      - name: Speed up audio (ffmpeg, keep extension)
+        shell: bash
+        env:
+          AUDIO_SPEED: "1.1"   # change this when needed
+        run: |
+          set -euo pipefail
+      
+          SPEED="${AUDIO_SPEED:-1.25}"
+          FILTER="atempo=${SPEED}"
+      
+          IN_FILE="${MP3_FILE}"
+          mkdir -p ${{ env.YT_DIR }}/tmp
+      
+          EXT="${IN_FILE##*.}"
+          EXT_LC="$(echo "$EXT" | tr '[:upper:]' '[:lower:]')"
+          BASE="$(basename "$IN_FILE")"
+          STEM="${BASE%.*}"
+      
+          OUT_FILE="${{ env.YT_DIR }}/tmp/${STEM}_${SPEED}x.${EXT_LC}"
+      
+          case "$EXT_LC" in
+            wav)
+              ffmpeg -y -i "$IN_FILE" -filter:a "$FILTER" -vn -c:a pcm_s16le "$OUT_FILE"
+              ;;
+            mp3)
+              ffmpeg -y -i "$IN_FILE" -filter:a "$FILTER" -vn -c:a libmp3lame -q:a 2 "$OUT_FILE"
+              ;;
+            m4a|mp4)
+              ffmpeg -y -i "$IN_FILE" -filter:a "$FILTER" -vn -c:a aac -b:a 192k "$OUT_FILE"
+              ;;
+            aac)
+              ffmpeg -y -i "$IN_FILE" -filter:a "$FILTER" -vn -c:a aac -b:a 192k -f adts "$OUT_FILE"
+              ;;
+            mpeg|mpg)
+              ffmpeg -y -i "$IN_FILE" -filter:a "$FILTER" -vn -c:a mp2 -b:a 192k "$OUT_FILE"
+              ;;
+            *)
+              echo "Unknown extension .$EXT_LC; defaulting to mp3 output."
+              OUT_FILE="${{ env.YT_DIR }}/tmp/${STEM}_${SPEED}x.mp3"
+              ffmpeg -y -i "$IN_FILE" -filter:a "$FILTER" -vn -c:a libmp3lame -q:a 2 "$OUT_FILE"
+              ;;
+          esac
+      
+          echo "MP3_FILE=$OUT_FILE" >> "$GITHUB_ENV"
+          ls -lh "$OUT_FILE"
+      
+      - name: Set ASPECT_RATIO from audio length
+        shell: bash
+        run: |
+          set -euo pipefail
+      
+          IN_FILE="$MP3_FILE"   # already picked earlier
+          DUR="$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$IN_FILE")"
+      
+          # Compare as float: < 120 sec => 9:16 else 16:9
+          if awk "BEGIN{exit !($DUR < 120)}"; then
+            ASPECT_RATIO="9:16"
+          else
+            ASPECT_RATIO="16:9"
+          fi
+      
+          # Persist for NEXT steps
+          echo "ASPECT_RATIO=$ASPECT_RATIO" >> "$GITHUB_ENV"   # available to later steps [web:17]
+      
+          echo "Audio duration seconds: $DUR"
+          echo "Chosen ASPECT_RATIO: $ASPECT_RATIO"
+
+
+
+      - name: Run generator (ytci code, workspace)
+        env:
+          LOCATION: us-central1
+          CHANNEL_NAME: ${{ env.CHANNEL_NAME }}
+          CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
+          WORK_DIR: ${{ vars.YT_DIR }}
+          FRAMES_DIR: ${{ env.YT_DIR }}/generated_frames
+          OUTPUT_DIR: ${{ env.YT_DIR }}/output
+          YT_JSON_PATH: ${{ env.YT_DIR }}/voiceover/yt.json
+          ASPECT_RATIO: ${{ env.ASPECT_RATIO }}
+        run: |
+          python ytci/scripts/generate_shorts.py
+
+      - name: Upload outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.YT_DIR }}-output-run${{ github.run_id }}
+          if-no-files-found: error
+          path: |
+            ${{ env.YT_DIR }}/output/*.mp4
+            ${{ env.YT_DIR }}/output/*.json
+            ${{ env.YT_DIR }}/input/*
+            ${{ env.YT_DIR }}/voiceover/*
+
+  
+      - name: Write run ID to repo
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_PAT }}
+          RUN_ID: ${{ github.run_id }}
+          CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
+        run: |
+          set -euo pipefail
+          TARGET_REPO="$(jq -r '.run_id_writer.repo' "$CHANNEL_CONFIG")"
+          TARGET_BRANCH="$(jq -r '.run_id_writer.branch // "main"' "$CHANNEL_CONFIG")"
+          TARGET_FILE="$(jq -r '.run_id_writer.file_path // "input-trigger.txt"' "$CHANNEL_CONFIG")"
+          ENABLED="$(jq -r '.run_id_writer.enabled // true' "$CHANNEL_CONFIG")"
+          if [[ "$ENABLED" != "true" ]]; then
+            echo "run_id_writer disabled in input.json; skipping."
+            exit 0
+          fi
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -rf _runid_repo
+          git clone --depth 1 --branch "$TARGET_BRANCH" "https://x-access-token:${GH_TOKEN}@github.com/${TARGET_REPO}.git" _runid_repo
+          cd _runid_repo
+          mkdir -p "$(dirname "$TARGET_FILE")" || true
+          echo "Run ID: ${RUN_ID}" >> "$TARGET_FILE"
+          git add "$TARGET_FILE"
+          # Avoid failing when there's nothing new to commit
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "Update input-trigger.txt with run ID ${RUN_ID}"
+          git push origin "$TARGET_BRANCH"
