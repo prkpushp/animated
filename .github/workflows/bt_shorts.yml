@@ -326,19 +326,29 @@ jobs:
           META_JSON=$(ls "$OUT_DIR"/*.json | head -1 )
           MSG="$(
             jq -r '
-              .title,
-              "",
-              .description,
-              "",
-              ((.hashtags // [])
-                | map("[\(. )](https://)")
-                | join(" ")),
-              "",
-              ((.hashtags // [])
-                | map(ltrimstr("#"))
-                | join(", "))
+              def norm:
+                if type=="string" then
+                  if startswith("[#") then
+                    . | ltrimstr("[") | split("]")[0]        # "[#tag]()" -> "#tag"
+                  else
+                    .
+                  end
+                else
+                  ""
+                end;
+          
+              (.hashtags // []) as $h
+              | ($h | map(norm) | map(select(length>0))) as $tags
+              | .title,
+                "",
+                .description,
+                "",
+                ($tags | map("[\(. )](https://)") | join(" ")),
+                "",
+                ($tags | map(ltrimstr("#")) | join(", "))
             ' "$META_JSON"
           )"
+
 
           curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d "chat_id=${TELEGRAM_CHAT_ID}" \
