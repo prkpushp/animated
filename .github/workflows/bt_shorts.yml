@@ -326,10 +326,17 @@ jobs:
           META_JSON=$(ls "$OUT_DIR"/*.json | head -1 )
           MSG="$(
             jq -r '
-              (.hashtags // []) as $h
-              | ($h | join(" "))
-              , ""
-              , ($h | map(ltrimstr("#")) | join(", "))
+              .title,
+              "",
+              .description,
+              "",
+              ((.hashtags // [])
+                | map("[\(. )](https://)")
+                | join(" ")),
+              "",
+              ((.hashtags // [])
+                | map(ltrimstr("#"))
+                | join(", "))
             ' "$META_JSON"
           )"
 
