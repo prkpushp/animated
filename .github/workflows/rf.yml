@@ -343,7 +343,31 @@ jobs:
           curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d "chat_id=${TELEGRAM_CHAT_ID}" \
             --data-urlencode "text=${MSG}"          
-                  
+
+      - name: Load IG config from input.json
+        env:
+          CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
+        run: |
+          set -euo pipefail
+      
+          IG_TOKEN="$(jq -r '.instagram.access_token // empty' "$CHANNEL_CONFIG")"
+          IG_USER_ID="$(jq -r '.instagram.user_id // empty' "$CHANNEL_CONFIG")"
+      
+          [ -n "$IG_TOKEN" ] || { echo "instagram.access_token missing"; exit 1; }
+          [ -n "$IG_USER_ID" ] || { echo "instagram.user_id missing"; exit 1; }
+      
+          echo "::add-mask::$IG_TOKEN"
+          echo "IG_ACCESS_TOKEN=$IG_TOKEN" >> "$GITHUB_ENV"
+          echo "IG_USER_ID=$IG_USER_ID" >> "$GITHUB_ENV"
+          echo "BUCKET=$PROJECT_ID" >> "$GITHUB_ENV"
+      
+      - name: Upload Reel to Instagram
+        env:
+          INPUT_GLOB: ${{ env.YT_DIR }}/output
+        run: |
+          chmod +x ytci/scripts/upload_reel_ig.sh
+          ./ytci/scripts/upload_reel_ig.sh
+                        
       - name: Write run ID to repo
         if: false
         env:
