@@ -367,6 +367,7 @@ jobs:
           INPUT_GLOB: ${{ env.YT_DIR }}/output
         run: |
           chmod +x ytci/scripts/upload_reel_ig.sh
+          gcloud auth list
           ./ytci/scripts/upload_reel_ig.sh
                         
       - name: Write run ID to repo
