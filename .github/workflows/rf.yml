@@ -91,7 +91,7 @@ jobs:
           credentials_json: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
           create_credentials_file: true
           export_environment_variables: true
-
+          
       - name: Set Variables from input.json
         env:
           CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
@@ -100,14 +100,16 @@ jobs:
           CHANNEL_NAME="$(jq -r '.channel_name // empty' "$CHANNEL_CONFIG")"
           [ -n "$CHANNEL_NAME" ] || { echo "channel_name missing in $CHANNEL_CONFIG"; exit 1; }
           echo "CHANNEL_NAME=$CHANNEL_NAME" >> "$GITHUB_ENV"
-
-      - name: Verify Google Cloud authentication
-        run: |
-          set -euo pipefail
-          gcloud auth list
           export PROJECT_ID="$(jq -r .project_id < "${{ env.GOOGLE_APPLICATION_CREDENTIALS }}")"
           echo "PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
 
+      - name: Verify Google Cloud authentication
+        run: |
+          echo '${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}' > /tmp/sa.json
+          gcloud config set project $PROJECT_ID     
+          gcloud auth activate-service-account --key-file=/tmp/sa.json
+          gcloud auth list
+          
       - name: System dependencies (ffmpeg + fonts)
         run: |
           sudo apt-get update
