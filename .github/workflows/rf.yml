@@ -346,23 +346,30 @@ jobs:
             -d "chat_id=${TELEGRAM_CHAT_ID}" \
             --data-urlencode "text=${MSG}"          
 
-      - name: Load IG config from input.json
+      - name: Load IG/FB config from input.json
         env:
           CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
         run: |
           set -euo pipefail
-      
+          #Instagram
           IG_TOKEN="$(jq -r '.instagram.access_token // empty' "$CHANNEL_CONFIG")"
           IG_USER_ID="$(jq -r '.instagram.user_id // empty' "$CHANNEL_CONFIG")"
-      
+
+          #Facebook
+          PAGE_TOKEN="$(jq -r '.facebook.access_token // empty' "$CHANNEL_CONFIG")"
+          PAGE_ID="$(jq -r '.facebook.page_id // empty' "$CHANNEL_CONFIG")"
+          
           [ -n "$IG_TOKEN" ] || { echo "instagram.access_token missing"; exit 1; }
           [ -n "$IG_USER_ID" ] || { echo "instagram.user_id missing"; exit 1; }
       
           echo "::add-mask::$IG_TOKEN"
+          echo "::add-mask::$PAGE_TOKEN"
           echo "IG_ACCESS_TOKEN=$IG_TOKEN" >> "$GITHUB_ENV"
           echo "ACCESS_TOKEN=$IG_TOKEN" >> "$GITHUB_ENV"
           echo "IG_USER_ID=$IG_USER_ID" >> "$GITHUB_ENV"
           echo "BUCKET=$PROJECT_ID" >> "$GITHUB_ENV"
+          echo "PAGE_TOKEN=$PAGE_TOKEN" >> "$GITHUB_ENV"
+          echo "PAGE_ID=$PAGE_ID" >> "$GITHUB_ENV"          
       
       - name: Upload Reel to Instagram
         env:
@@ -371,7 +378,15 @@ jobs:
           chmod +x ytci/scripts/upload_reel_ig.sh
           gcloud auth list
           ./ytci/scripts/upload_reel_ig.sh
-                        
+
+      - name: Upload Reel to Facebook
+        env:
+          INPUT_GLOB: ${{ env.YT_DIR }}/output
+        run: |
+          chmod +x ytci/scripts/upload_reel_fb.sh
+          gcloud auth list
+          ./ytci/scripts/upload_reel_fb.sh
+          
       - name: Write run ID to repo
         if: false
         env:
