@@ -201,13 +201,20 @@ jobs:
           AUDIO_SPEED: "1.15"   # change this when needed
         run: |
           set -euo pipefail
-      
-          SPEED="${AUDIO_SPEED:-1.25}"
-          FILTER="atempo=${SPEED}"
-      
           IN_FILE="${MP3_FILE}"
           mkdir -p ${{ env.YT_DIR }}/tmp
+
+          IN_FILE="$MP3_FILE"   # already picked earlier
+          DUR="$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$IN_FILE")"
       
+          # Compare as float: < 120 sec => 9:16 else 16:9
+          if awk "BEGIN{exit !($DUR < 120)}"; then
+            AUDIO_SPEED="1.15"
+          else
+            AUDIO_SPEED="1.0"
+          fi
+          SPEED="${AUDIO_SPEED:-1.25}"
+          FILTER="atempo=${SPEED}"          
           EXT="${IN_FILE##*.}"
           EXT_LC="$(echo "$EXT" | tr '[:upper:]' '[:lower:]')"
           BASE="$(basename "$IN_FILE")"
