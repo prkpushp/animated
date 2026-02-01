@@ -202,8 +202,7 @@ jobs:
         run: |
           set -euo pipefail
       
-          SPEED="${AUDIO_SPEED:-1.25}"
-          FILTER="atempo=${SPEED}"
+
       
           IN_FILE="${MP3_FILE}"
           mkdir -p ${{ env.YT_DIR }}/tmp
@@ -212,7 +211,16 @@ jobs:
           EXT_LC="$(echo "$EXT" | tr '[:upper:]' '[:lower:]')"
           BASE="$(basename "$IN_FILE")"
           STEM="${BASE%.*}"
+          DUR="$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$IN_FILE")"
       
+          # Compare as float: < 120 sec => 1.15 else 1
+          if awk "BEGIN{exit !($DUR < 120)}"; then
+            AUDIO_SPEED="1.15"
+          else
+            AUDIO_SPEED="1.0"
+          fi
+          SPEED="${AUDIO_SPEED:-1.25}"
+          FILTER="atempo=${SPEED}"
           OUT_FILE="${{ env.YT_DIR }}/tmp/${STEM}_${SPEED}x.${EXT_LC}"
       
           case "$EXT_LC" in
