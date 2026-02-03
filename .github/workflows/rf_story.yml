@@ -3,7 +3,7 @@ name: Story IG & FB
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 19 1 1 *"   # 19:00 UTC = 00:30 IST
+    - cron: "30 05 * * *"   # 05:30 UTC = 11:00AM IST
     
 jobs:
   build:
