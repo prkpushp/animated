@@ -1,4 +1,4 @@
-name: RF
+name: Story IG & FB
 
 on:
   workflow_dispatch:
