@@ -1,0 +1,112 @@
+name: BT Story
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 05 * * *"   # 05:30 UTC = 11:00AM IST
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      YT_DIR: bt
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout animated
+        uses: actions/checkout@v4
+
+      - name: Checkout ytci (private)
+        uses: actions/checkout@v4
+        with:
+          repository: prkpushp/ytci
+          token: ${{ secrets.CROSS_REPO_PAT }}
+          path: ytci
+          fetch-depth: 1
+
+      - name: Validate channel config JSON
+        run: |
+          set -euo pipefail
+          jq -e . ytci/${{ env.YT_DIR }}/input.json >/dev/null
+          echo "✅ ytci/${{ env.YT_DIR }}/input.json is valid JSON"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: ytci/scripts/requirements.txt
+
+      - name: Auth to Google Cloud (service account JSON)
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
+          create_credentials_file: true
+          export_environment_variables: true
+
+      - name: Set Variables from input.json
+        env:
+          CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
+        run: |
+          set -euo pipefail
+          CHANNEL_NAME="$(jq -r '.channel_name // empty' "$CHANNEL_CONFIG")"
+          [ -n "$CHANNEL_NAME" ] || { echo "channel_name missing in $CHANNEL_CONFIG"; exit 1; }
+          echo "CHANNEL_NAME=$CHANNEL_NAME" >> "$GITHUB_ENV"
+          export PROJECT_ID="$(jq -r .project_id < "${{ env.GOOGLE_APPLICATION_CREDENTIALS }}")"
+          echo "PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
+
+      - name: Verify Google Cloud authentication
+        run: |
+          echo '${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}' > /tmp/sa.json
+          gcloud config set project $PROJECT_ID     
+          gcloud auth activate-service-account --key-file=/tmp/sa.json
+          gcloud auth list
+          
+      - name: System dependencies (ffmpeg + fonts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core jq
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ytci/scripts/requirements.txt
+
+      - name: Prepare workspace
+        run: |
+          echo "Preparing workspace: $YT_DIR"
+          mkdir -p ${{ env.YT_DIR }}/input ${{ env.YT_DIR }}/output ${{ env.YT_DIR }}/tmp ${{ env.YT_DIR }}/voiceover ${{ env.YT_DIR }}/generated_frames
+    
+
+      - name: Load IG/FB config from input.json
+        env:
+          CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
+        run: |
+          set -euo pipefail
+          
+          #Instagram
+          IG_TOKEN="$(jq -r '.instagram.access_token // empty' "$CHANNEL_CONFIG")"
+          IG_USER_ID="$(jq -r '.instagram.user_id // empty' "$CHANNEL_CONFIG")"
+
+          #Facebook
+          PAGE_TOKEN="$(jq -r '.facebook.access_token // empty' "$CHANNEL_CONFIG")"
+          PAGE_ID="$(jq -r '.facebook.page_id // empty' "$CHANNEL_CONFIG")"
+          [ -n "$IG_TOKEN" ] || { echo "instagram.access_token missing"; exit 1; }
+          [ -n "$IG_USER_ID" ] || { echo "instagram.user_id missing"; exit 1; } 
+          echo "::add-mask::$IG_TOKEN"
+          echo "::add-mask::$PAGE_TOKEN"
+          echo "IG_ACCESS_TOKEN=$IG_TOKEN" >> "$GITHUB_ENV"
+          echo "ACCESS_TOKEN=$IG_TOKEN" >> "$GITHUB_ENV"
+          echo "IG_USER_ID=$IG_USER_ID" >> "$GITHUB_ENV"
+          echo "BUCKET=$PROJECT_ID" >> "$GITHUB_ENV"
+          echo "PAGE_TOKEN=$PAGE_TOKEN" >> "$GITHUB_ENV"
+          echo "PAGE_ID=$PAGE_ID" >> "$GITHUB_ENV"          
+      
+      - name: Upload Story to Instagram
+        env:
+          INPUT_GLOB: ${{ env.YT_DIR }}/output
+        run: |
+          chmod +x ytci/scripts/upload_story_ig.sh
+          gcloud auth list
+          ./ytci/scripts/upload_story_ig.sh
