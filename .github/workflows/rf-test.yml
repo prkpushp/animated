@@ -225,7 +225,7 @@ jobs:
           LOCATION: us-central1
           CHANNEL_NAME: ${{ env.CHANNEL_NAME }}
           CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
-          WORK_DIR: ${{ vars.YT_DIR }}
+          WORK_DIR: ${{ env.YT_DIR }}   # <--- CHANGED THIS from vars.YT_DIR
           FRAMES_DIR: ${{ env.YT_DIR }}/generated_frames
           OUTPUT_DIR: ${{ env.YT_DIR }}/output
           YT_JSON_PATH: ${{ env.YT_DIR }}/voiceover/yt.json
