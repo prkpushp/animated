@@ -52,6 +52,30 @@ jobs:
           credentials_json: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
           create_credentials_file: true
           export_environment_variables: true
+
+      - name: Detect input mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+      
+          MODE="dispatch"
+      
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TXT_FILES=("$YT_DIR"/*.txt)
+            AUDIO_FILES=("$YT_DIR"/*.mp3 "$YT_DIR"/*.wav "$YT_DIR"/*.m4a "$YT_DIR"/*.mpeg)
+      
+            if (( ${#TXT_FILES[@]} > 0 )); then
+              MODE="yt_txt"
+            elif (( ${#AUDIO_FILES[@]} > 0 )); then
+              MODE="yt_audio"
+            else
+              MODE="push_unknown"
+            fi
+          fi
+      
+          echo "INPUT_MODE=$MODE" >> "$GITHUB_ENV"
+          echo "INPUT_MODE=$MODE"
           
       - name: Set Variables from input.json
         env:
