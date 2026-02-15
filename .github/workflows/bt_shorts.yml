@@ -258,7 +258,7 @@ jobs:
           DUR="$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$IN_FILE")"
       
           # Compare as float: < 120 sec => 9:16 else 16:9
-          if awk "BEGIN{exit !($DUR < 120)}"; then
+          if awk "BEGIN{exit !($DUR < 30)}"; then
             ASPECT_RATIO="9:16"
           else
             ASPECT_RATIO="16:9"
