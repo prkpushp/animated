@@ -14,7 +14,7 @@ on:
       - "spl/*.txt"
       - "spl/*.m4a"
   schedule:
-    - cron: "30 00 * * *"   # 19:00 UTC = 00:30 IST
+    - cron: "30 00 */3 * *"   # 19:00 UTC = 00:30 IST
     
 jobs:
   build:
