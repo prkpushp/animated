@@ -162,27 +162,37 @@ jobs:
           ytci/scripts/tts.sh "$TEXT" ${{ env.YT_DIR }}/input/voiceover.wav
 
 
-      - name: Pick audio file
+      - name: Pick audio file (single vs multi-wav)
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$YT_DIR/input"
+          mkdir -p "$YT_DIR/input" "$YT_DIR/tmp"
       
-          # Helper: pick newest file by mtime (works even if multiple files exist)
-          pick_newest() {
-            # args are find roots
-            find "$@" -maxdepth 1 -type f \
-              \( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \) \
-              -printf '%T@ %p\n' \
-              | sort -nr \
-              | head -n 1 \
-              | cut -d' ' -f2-
-          }
+          WAV_LIST_FILE="$YT_DIR/tmp/wav_inputs.txt"
+          : > "$WAV_LIST_FILE"
       
           if [[ "${INPUT_MODE}" == "yt_audio" ]]; then
-            AUDIO_FILE="$(pick_newest "$YT_DIR")"
+            mapfile -t WAVS < <(ls -1 "$YT_DIR"/*.wav 2>/dev/null | sort -V || true)
+            WAV_COUNT="${#WAVS[@]}"
+      
+            if (( WAV_COUNT >= 3 )); then
+              echo "MULTI_WAV_MODE=true" >> "$GITHUB_ENV"
+              printf "%s\n" "${WAVS[@]}" > "$WAV_LIST_FILE"
+              echo "WAV_LIST_FILE=$WAV_LIST_FILE" >> "$GITHUB_ENV"
+              echo "Multi-wav mode: $WAV_COUNT wav files"
+              cat "$WAV_LIST_FILE"
+              exit 0
+            fi
+      
+            # <3 WAVs => fall back to your single-file behavior (pick newest audio in bt/)
+            AUDIO_FILE="$(find "$YT_DIR" -maxdepth 1 -type f \
+              \\( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \\) \
+              -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2- || true)"
           else
-            AUDIO_FILE="$(pick_newest "$YT_DIR/input")"
+            # Non-yt_audio modes: pick from generated input folder like before
+            AUDIO_FILE="$(find "$YT_DIR/input" -maxdepth 1 -type f \
+              \\( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \\) \
+              -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2- || true)"
           fi
       
           if [[ -z "${AUDIO_FILE:-}" ]]; then
@@ -190,19 +200,20 @@ jobs:
             exit 1
           fi
       
+          echo "MULTI_WAV_MODE=false" >> "$GITHUB_ENV"
           echo "MP3_FILE=$AUDIO_FILE" >> "$GITHUB_ENV"
           echo "Using audio: $AUDIO_FILE"
 
 
 
+
       - name: Speed up audio (ffmpeg, keep extension)
+        if: env.MULTI_WAV_MODE != 'true'
         shell: bash
         env:
-          AUDIO_SPEED: "1.1"   # change this when needed
+          AUDIO_SPEED: "1.1"
         run: |
           set -euo pipefail
-      
-
       
           IN_FILE="${MP3_FILE}"
           mkdir -p ${{ env.YT_DIR }}/tmp
@@ -249,41 +260,97 @@ jobs:
           echo "MP3_FILE=$OUT_FILE" >> "$GITHUB_ENV"
           ls -lh "$OUT_FILE"
       
-      - name: Set ASPECT_RATIO from audio length
+      - name: Set ASPECT_RATIO (force in multi-wav)
         shell: bash
         run: |
           set -euo pipefail
       
-          IN_FILE="$MP3_FILE"   # already picked earlier
-          DUR="$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$IN_FILE")"
+          if [[ "${MULTI_WAV_MODE:-false}" == "true" ]]; then
+            echo "ASPECT_RATIO=16:9" >> "$GITHUB_ENV"
+            echo "Forced ASPECT_RATIO: 16:9 (multi-wav mode)"
+            exit 0
+          fi
       
-          # Compare as float: < 120 sec => 9:16 else 16:9
+          IN_FILE="$MP3_FILE"
+          DUR="$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$IN_FILE")"
           if awk "BEGIN{exit !($DUR < 120)}"; then
             ASPECT_RATIO="9:16"
           else
             ASPECT_RATIO="16:9"
           fi
       
-          # Persist for NEXT steps
-          echo "ASPECT_RATIO=$ASPECT_RATIO" >> "$GITHUB_ENV"   # available to later steps [web:17]
-      
+          echo "ASPECT_RATIO=$ASPECT_RATIO" >> "$GITHUB_ENV"
           echo "Audio duration seconds: $DUR"
           echo "Chosen ASPECT_RATIO: $ASPECT_RATIO"
 
 
 
-      - name: Run generator (ytci code, workspace)
+
+      - name: Run generator (single or multi-wav) + concat + cleanup
         env:
           LOCATION: us-central1
           CHANNEL_NAME: ${{ env.CHANNEL_NAME }}
           CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
-          WORK_DIR: ${{ vars.YT_DIR }}
-          FRAMES_DIR: ${{ env.YT_DIR }}/generated_frames
-          OUTPUT_DIR: ${{ env.YT_DIR }}/output
           YT_JSON_PATH: ${{ env.YT_DIR }}/voiceover/yt.json
           ASPECT_RATIO: ${{ env.ASPECT_RATIO }}
+        shell: bash
         run: |
-          python ytci/scripts/generate_shorts.py
+          set -euo pipefail
+      
+          if [[ "${MULTI_WAV_MODE:-false}" != "true" ]]; then
+            python ytci/scripts/generate_shorts.py
+            exit 0
+          fi
+      
+          PARTS_DIR="${YT_DIR}/tmp/parts"
+          mkdir -p "$PARTS_DIR" "${YT_DIR}/output"
+      
+          i=0
+          while IFS= read -r wav; do
+            [[ -n "$wav" ]] || continue
+            i=$((i+1))
+      
+            export MP3_FILE="$wav"
+            export ASPECT_RATIO="16:9"
+            export FRAMES_DIR="${YT_DIR}/generated_frames/part_${i}"
+            export OUTPUT_DIR="${YT_DIR}/tmp/out_part_${i}"
+            mkdir -p "$FRAMES_DIR" "$OUTPUT_DIR"
+      
+            echo "Generating part $i from: $wav"
+            python ytci/scripts/generate_shorts.py
+      
+            PART_MP4="$(ls -1 "$OUTPUT_DIR"/*.mp4 | head -n 1 || true)"
+            [[ -n "${PART_MP4:-}" ]] || { echo "No mp4 produced for part $i"; exit 1; }
+            mv "$PART_MP4" "${PARTS_DIR}/$(printf '%03d' "$i").mp4"
+      
+            # Keep one json in final output so your Telegram/IG/FB steps still work
+            if (( i == 1 )); then
+              PART_JSON="$(ls -1 "$OUTPUT_DIR"/*.json | head -n 1 || true)"
+              [[ -n "${PART_JSON:-}" ]] && cp "$PART_JSON" "${YT_DIR}/output/meta.json"
+            fi
+      
+            rm -rf "$OUTPUT_DIR"
+          done < "${WAV_LIST_FILE}"
+      
+          # Concat parts -> single final mp4
+          LIST_FILE="${YT_DIR}/tmp/concat_list.txt"
+          : > "$LIST_FILE"
+          for f in "$PARTS_DIR"/*.mp4; do
+            echo "file '$f'" >> "$LIST_FILE"
+          done
+      
+          FINAL_MP4="${YT_DIR}/output/combined.mp4"
+      
+          # Try stream copy first; if it fails, re-encode for compatibility [web:30]
+          if ffmpeg -y -f concat -safe 0 -i "$LIST_FILE" -c copy "$FINAL_MP4"; then
+            echo "Concatenated with stream copy: $FINAL_MP4"
+          else
+            ffmpeg -y -f concat -safe 0 -i "$LIST_FILE" -c:v libx264 -c:a aac -movflags +faststart "$FINAL_MP4"
+          fi
+      
+          # Remove the shorter per-wav videos
+          rm -f "$PARTS_DIR"/*.mp4 "$LIST_FILE"
+
 
       - name: Upload outputs
         uses: actions/upload-artifact@v4
