@@ -185,9 +185,85 @@ jobs:
             fi
       
             # <3 WAVs => fall back to your single-file behavior (pick newest audio in bt/)
+      - name: Pick audio file (single vs multi-wav)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$YT_DIR/input" "$YT_DIR/tmp"
+      
+          WAV_LIST_FILE="$YT_DIR/tmp/wav_inputs.txt"
+          : > "$WAV_LIST_FILE"
+      
+          if [[ "${INPUT_MODE}" == "yt_audio" ]]; then
+            mapfile -t WAVS < <(ls -1 "$YT_DIR"/*.wav 2>/dev/null | sort -V || true)
+            WAV_COUNT="${#WAVS[@]}"
+      
+            if (( WAV_COUNT >= 3 )); then
+              echo "MULTI_WAV_MODE=true" >> "$GITHUB_ENV"
+              printf "%s\n" "${WAVS[@]}" > "$WAV_LIST_FILE"
+              echo "WAV_LIST_FILE=$WAV_LIST_FILE" >> "$GITHUB_ENV"
+              echo "Multi-wav mode: $WAV_COUNT wav files"
+              cat "$WAV_LIST_FILE"
+              exit 0
+            fi
+      
+            # <3 WAVs => fall back to your single-file behavior (pick newest audio in bt/)
             AUDIO_FILE="$(find "$YT_DIR" -maxdepth 1 -type f \
               \\( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \\) \
               -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2- || true)"
+          else
+            # Non-yt_audio modes: pick from generated input folder like before
+      - name: Pick audio file (single vs multi-wav)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$YT_DIR/input" "$YT_DIR/tmp"
+      
+          WAV_LIST_FILE="$YT_DIR/tmp/wav_inputs.txt"
+          : > "$WAV_LIST_FILE"
+      
+          if [[ "${INPUT_MODE}" == "yt_audio" ]]; then
+            mapfile -t WAVS < <(ls -1 "$YT_DIR"/*.wav 2>/dev/null | sort -V || true)
+            WAV_COUNT="${#WAVS[@]}"
+      
+            if (( WAV_COUNT >= 3 )); then
+              echo "MULTI_WAV_MODE=true" >> "$GITHUB_ENV"
+              printf "%s\n" "${WAVS[@]}" > "$WAV_LIST_FILE"
+              echo "WAV_LIST_FILE=$WAV_LIST_FILE" >> "$GITHUB_ENV"
+              echo "Multi-wav mode: $WAV_COUNT wav files"
+              cat "$WAV_LIST_FILE"
+              exit 0
+            fi
+      
+            # <3 WAVs => fall back to your single-file behavior (pick newest audio in bt/)
+            AUDIO_FILE="$(find "$YT_DIR" -maxdepth 1 -type f \
+              \\( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \\) \
+              -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2- || true)"
+          else
+            # Non-yt_audio modes: pick from generated input folder like before
+            AUDIO_FILE="$(find "$YT_DIR/input" -maxdepth 1 -type f \
+              \\( -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" \\) \
+              -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2- || true)"
+          fi
+      
+          if [[ -z "${AUDIO_FILE:-}" ]]; then
+            echo "No audio found (INPUT_MODE=$INPUT_MODE)."
+            exit 1
+          fi
+      
+          echo "MULTI_WAV_MODE=false" >> "$GITHUB_ENV"
+          echo "MP3_FILE=$AUDIO_FILE" >> "$GITHUB_ENV"
+          echo "Using audio: $AUDIO_FILE"
+          fi
+      
+          if [[ -z "${AUDIO_FILE:-}" ]]; then
+            echo "No audio found (INPUT_MODE=$INPUT_MODE)."
+            exit 1
+          fi
+      
+          echo "MULTI_WAV_MODE=false" >> "$GITHUB_ENV"
+          echo "MP3_FILE=$AUDIO_FILE" >> "$GITHUB_ENV"
+          echo "Using audio: $AUDIO_FILE"
           else
             # Non-yt_audio modes: pick from generated input folder like before
             AUDIO_FILE="$(find "$YT_DIR/input" -maxdepth 1 -type f \
