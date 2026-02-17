@@ -344,7 +344,7 @@ jobs:
       - name: Upload outputs (including multi-wav parts)
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.YT_DIR }}-output-run${{ github.run_id }}
+          name: ${{ env.YT_DIR }}-output-shorts-run${{ github.run_id }}
           if-no-files-found: error
           path: |
             ${{ env.YT_DIR }}/output/*.mp4
