@@ -286,26 +286,35 @@ jobs:
           echo "Audio duration seconds: $DUR"
           echo "Chosen ASPECT_RATIO: $ASPECT_RATIO"
 
-
-
-
-      - name: Run generator (single or multi-wav) + concat + cleanup
+      - name: Run generator (single or multi-wav) - create videos only
+        shell: bash
         env:
           LOCATION: us-central1
           CHANNEL_NAME: ${{ env.CHANNEL_NAME }}
           CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
           YT_JSON_PATH: ${{ env.YT_DIR }}/voiceover/yt.json
           ASPECT_RATIO: ${{ env.ASPECT_RATIO }}
-        shell: bash
         run: |
           set -euo pipefail
       
+          newest_file() {
+            local dir="$1"
+            local pattern="$2"
+            find "$dir" -type f -name "$pattern" -printf '%T@ %p\n' \
+              | sort -nr | head -n 1 | cut -d' ' -f2- || true
+          }
+      
           if [[ "${MULTI_WAV_MODE:-false}" != "true" ]]; then
+            export FRAMES_DIR="${YT_DIR}/generated_frames"
+            export OUTPUT_DIR="${YT_DIR}/output"
             python ytci/scripts/generate_shorts.py
             exit 0
           fi
       
-          PARTS_DIR="${YT_DIR}/tmp/parts"
+          # multi-wav: generate per-wav part mp4s into bt/tmp/parts
+          export ASPECT_RATIO="16:9"
+          TMP_ROOT="${YT_DIR}/tmp"
+          PARTS_DIR="${TMP_ROOT}/parts"
           mkdir -p "$PARTS_DIR" "${YT_DIR}/output"
       
           i=0
@@ -314,46 +323,67 @@ jobs:
             i=$((i+1))
       
             export MP3_FILE="$wav"
-            export ASPECT_RATIO="16:9"
             export FRAMES_DIR="${YT_DIR}/generated_frames/part_${i}"
-            export OUTPUT_DIR="${YT_DIR}/tmp/out_part_${i}"
+            export OUTPUT_DIR="${TMP_ROOT}/out_part_${i}"
             mkdir -p "$FRAMES_DIR" "$OUTPUT_DIR"
       
             echo "Generating part $i from: $wav"
             python ytci/scripts/generate_shorts.py
       
-            PART_MP4="$(ls -1 "$OUTPUT_DIR"/*.mp4 | head -n 1 || true)"
-            [[ -n "${PART_MP4:-}" ]] || { echo "No mp4 produced for part $i"; exit 1; }
+            PART_MP4="$(newest_file "$OUTPUT_DIR" "*.mp4")"
+            [[ -n "${PART_MP4:-}" ]] || { echo "No mp4 produced for part $i in $OUTPUT_DIR"; exit 1; }
             mv "$PART_MP4" "${PARTS_DIR}/$(printf '%03d' "$i").mp4"
       
-            # Keep one json in final output so your Telegram/IG/FB steps still work
+            # Keep exactly one json for downstream steps that expect a json
             if (( i == 1 )); then
-              PART_JSON="$(ls -1 "$OUTPUT_DIR"/*.json | head -n 1 || true)"
+              PART_JSON="$(newest_file "$OUTPUT_DIR" "*.json")"
               [[ -n "${PART_JSON:-}" ]] && cp "$PART_JSON" "${YT_DIR}/output/meta.json"
             fi
-      
-            rm -rf "$OUTPUT_DIR"
           done < "${WAV_LIST_FILE}"
-      
-          # Concat parts -> single final mp4
-          LIST_FILE="${YT_DIR}/tmp/concat_list.txt"
-          : > "$LIST_FILE"
-          for f in "$PARTS_DIR"/*.mp4; do
-            echo "file '$f'" >> "$LIST_FILE"
-          done
-      
-          FINAL_MP4="${YT_DIR}/output/combined.mp4"
-      
-          # Try stream copy first; if it fails, re-encode for compatibility [web:30]
-          if ffmpeg -y -f concat -safe 0 -i "$LIST_FILE" -c copy "$FINAL_MP4"; then
-            echo "Concatenated with stream copy: $FINAL_MP4"
-          else
-            ffmpeg -y -f concat -safe 0 -i "$LIST_FILE" -c:v libx264 -c:a aac -movflags +faststart "$FINAL_MP4"
-          fi
-      
-          # Remove the shorter per-wav videos
-          rm -f "$PARTS_DIR"/*.mp4 "$LIST_FILE"
 
+      - name: Upload outputs (including multi-wav parts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.YT_DIR }}-output-run${{ github.run_id }}
+          if-no-files-found: error
+          path: |
+            ${{ env.YT_DIR }}/output/*.mp4
+            ${{ env.YT_DIR }}/output/*.json
+            ${{ env.YT_DIR }}/tmp/parts/*.mp4
+            ${{ env.YT_DIR }}/tmp/out_part_*/*.mp4
+            ${{ env.YT_DIR }}/input/*
+            ${{ env.YT_DIR }}/voiceover/*
+      
+      - name: Concat multi-wav parts + cleanup
+        if: env.MULTI_WAV_MODE == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+      
+          TMP_ROOT="${YT_DIR}/tmp"
+          PARTS_DIR="${TMP_ROOT}/parts"
+      
+          # Build concat list from inside bt/tmp so paths resolve correctly [web:92]
+          (
+            cd "$TMP_ROOT"
+            : > "concat_list.txt"
+            for f in parts/*.mp4; do
+              echo "file '$f'" >> "concat_list.txt"
+            done
+      
+            FINAL_MP4="${GITHUB_WORKSPACE}/${YT_DIR}/output/combined.mp4"
+      
+            if ffmpeg -y -f concat -safe 0 -i "concat_list.txt" -c copy "$FINAL_MP4"; then
+              echo "Concat OK (stream copy)"
+            else
+              ffmpeg -y -f concat -safe 0 -i "concat_list.txt" -c:v libx264 -c:a aac -movflags +faststart "$FINAL_MP4"
+            fi
+          )
+      
+          # Cleanup after concat (artifact already uploaded)
+          rm -f "${TMP_ROOT}/concat_list.txt" || true
+          rm -f "${PARTS_DIR}/"*.mp4 || true
+          rm -rf "${TMP_ROOT}/out_part_"* || true
 
       - name: Upload outputs
         uses: actions/upload-artifact@v4
