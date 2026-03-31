@@ -1,4 +1,0 @@
-google-cloud-aiplatform
-Pillow
-numpy
-moviepy
