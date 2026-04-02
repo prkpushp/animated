@@ -474,7 +474,6 @@ jobs:
           echo "PAGE_ID=$PAGE_ID" >> "$GITHUB_ENV"          
       
       - name: Upload Reel to Instagram
-        if: false
         env:
           INPUT_GLOB: ${{ env.YT_DIR }}/output
         run: |
@@ -483,7 +482,6 @@ jobs:
           ./ytci/scripts/upload_reel_ig.sh
 
       - name: Upload Reel to Facebook
-        if: false
         env:
           INPUT_GLOB: ${{ env.YT_DIR }}/output
         run: |
