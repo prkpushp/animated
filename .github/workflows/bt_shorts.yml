@@ -13,9 +13,19 @@ on:
       - "bt/*.wav"
       - "bt/*.txt"
       - "bt/*.m4a"
+
   schedule:
-    - cron: "0 19 1 1 *"   # 19:00 UTC = 00:30 IST
-    
+    - cron: '30 22 * * *'  
+    - cron: '30 3 * * *'   # 9:00 AM IST
+    - cron: '0 5 * * *'    # 10:30 AM IST
+    - cron: '45 7 * * *'   # 1:15 PM IST
+    - cron: '0 9 * * *'    # 2:30 PM IST
+    - cron: '0 10 * * *'   # 3:30 PM IST
+    - cron: '15 13 * * *'  # 6:45 PM IST 🔥
+    - cron: '15 14 * * *'  # 7:45 PM IST 🔥
+    - cron: '0 15 * * *'   # 8:30 PM IST 🔥
+    - cron: '45 15 * * *'  # 9:15 PM IST 🔥
+    - cron: '45 16 * * *'  # 10:15 PM IST 🔥    
 jobs:
   build:
     runs-on: ubuntu-latest
