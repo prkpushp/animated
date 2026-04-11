@@ -54,6 +54,7 @@ jobs:
 
 
       - name: Set topic (dispatch vs schedule)
+        if: false
         shell: bash
         run: |
           set -euo pipefail
@@ -161,7 +162,7 @@ jobs:
       
           ytci/scripts/tts.sh "$TEXT" ${{ env.YT_DIR }}/input/voiceover.wav
 
-
+      
       - name: Pick audio file (single vs multi-wav)
         shell: bash
         run: |
@@ -171,11 +172,17 @@ jobs:
           WAV_LIST_FILE="$YT_DIR/tmp/wav_inputs.txt"
           : > "$WAV_LIST_FILE"
       
-          if [[ "${INPUT_MODE}" == "yt_audio" ]]; then
-            mapfile -t WAVS < <(ls -1 "$YT_DIR"/*.wav 2>/dev/null | sort -V || true)
+          # Decide source directory (ONLY change for schedule)
+          AUDIO_SOURCE_DIR="$YT_DIR"
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            AUDIO_SOURCE_DIR="$YT_DIR/audio"
+          fi
+      
+          if [[ "${INPUT_MODE}" == "yt_audio" || "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            mapfile -t WAVS < <(ls -1 "$AUDIO_SOURCE_DIR"/*.wav 2>/dev/null | sort -V || true)
             WAV_COUNT="${#WAVS[@]}"
       
-            if (( WAV_COUNT >= 3 )); then
+            if (( WAV_COUNT >= 30 )); then
               echo "MULTI_WAV_MODE=true" >> "$GITHUB_ENV"
               printf "%s\n" "${WAVS[@]}" > "$WAV_LIST_FILE"
               echo "WAV_LIST_FILE=$WAV_LIST_FILE" >> "$GITHUB_ENV"
@@ -184,17 +191,16 @@ jobs:
               exit 0
             fi
       
-            # <3 WAVs => fall back to your single-file behavior (pick newest audio in bt/)
-            AUDIO_FILE="$(find "$YT_DIR" -maxdepth 1 -type f \
+            # <30 WAVs => pick oldest audio from source dir
+            AUDIO_FILE="$(find "$AUDIO_SOURCE_DIR" -maxdepth 1 -type f \
+              '(' -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" ')' \
+              -printf '%T@ %p\n' | sort -n | head -n 1 | cut -d' ' -f2- || true)"
+      
+          else
+            # Non-yt_audio modes (unchanged)
+            AUDIO_FILE="$(find "$YT_DIR/input" -maxdepth 1 -type f \
               '(' -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" ')' \
               -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2- || true)"
-
-          else
-            # Non-yt_audio modes: pick from generated input folder like before
-          AUDIO_FILE="$(find "$YT_DIR/input" -maxdepth 1 -type f \
-            '(' -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" ')' \
-            -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2- || true)"
-
           fi
       
           if [[ -z "${AUDIO_FILE:-}" ]]; then
