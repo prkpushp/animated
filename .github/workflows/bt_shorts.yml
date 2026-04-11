@@ -43,7 +43,7 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-      
+          sleep $((120 + RANDOM % 240))  # 2–6 min random delay
           MODE="dispatch"
       
           if [[ "${{ github.event_name }}" == "push" ]]; then
