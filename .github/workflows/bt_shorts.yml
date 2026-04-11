@@ -127,7 +127,8 @@ jobs:
           mkdir -p ${{ env.YT_DIR }}/input ${{ env.YT_DIR }}/output ${{ env.YT_DIR }}/tmp ${{ env.YT_DIR }}/voiceover ${{ env.YT_DIR }}/generated_frames
 
       - name: Generate JSON (Vertex Gemini)
-        if: env.INPUT_MODE != 'yt_txt' && env.INPUT_MODE != 'yt_audio'
+        if: false
+        #if: env.INPUT_MODE != 'yt_txt' && env.INPUT_MODE != 'yt_audio'
         shell: bash
         env:
           LOCATION: us-central1
@@ -142,7 +143,8 @@ jobs:
           ytci/scripts/generate_voiceover_json.sh
 
       - name: Script_content -> WAV (TTS via ytci tts.sh + input.json)
-        if: env.INPUT_MODE != 'yt_audio'
+        if: false
+        #if: env.INPUT_MODE != 'yt_audio'
         shell: bash
         env:
           PROJECT_ID: ${{ env.PROJECT_ID }}
