@@ -54,14 +54,24 @@ jobs:
 
 
       - name: Set topic (dispatch vs schedule)
-        if: false
         shell: bash
         run: |
           set -euo pipefail
+          shopt -s nullglob
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
             echo 'TOPIC=Most trending topic of today of your choice' >> "$GITHUB_ENV"
+            # Check if any audio exists in bt/audio
+            AUDIO_FILES=("$YT_DIR/audio"/*.mp3 "$YT_DIR/audio"/*.wav "$YT_DIR/audio"/*.m4a "$YT_DIR/audio"/*.mpeg)
+            if (( ${#AUDIO_FILES[@]} > 0 )); then
+              echo "TEXT_CONVERSION_NEEDED=false" >> "$GITHUB_ENV"
+              echo "Audio found in bt/audio → skipping text conversion"
+            else
+              echo "TEXT_CONVERSION_NEEDED=true" >> "$GITHUB_ENV"
+              echo "No audio found → text conversion needed"
+            fi
           else
             echo 'TOPIC=${{ inputs.topic }}' >> "$GITHUB_ENV"
+            echo "TEXT_CONVERSION_NEEDED=true" >> "$GITHUB_ENV"
           fi
                 
 
@@ -127,7 +137,7 @@ jobs:
           mkdir -p ${{ env.YT_DIR }}/input ${{ env.YT_DIR }}/output ${{ env.YT_DIR }}/tmp ${{ env.YT_DIR }}/voiceover ${{ env.YT_DIR }}/generated_frames
 
       - name: Generate JSON (Vertex Gemini)
-        if: false
+        if: env.TEXT_CONVERSION_NEEDED == 'true'
         #if: env.INPUT_MODE != 'yt_txt' && env.INPUT_MODE != 'yt_audio'
         shell: bash
         env:
@@ -143,7 +153,7 @@ jobs:
           ytci/scripts/generate_voiceover_json.sh
 
       - name: Script_content -> WAV (TTS via ytci tts.sh + input.json)
-        if: false
+        if: env.TEXT_CONVERSION_NEEDED == 'true'
         #if: env.INPUT_MODE != 'yt_audio'
         shell: bash
         env:
