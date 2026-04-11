@@ -22,7 +22,7 @@ jobs:
     env:
       YT_DIR: bt
     permissions:
-      contents: read
+      contents: write
 
     steps:
       - name: Checkout animated
@@ -456,6 +456,38 @@ jobs:
             -d "chat_id=${TELEGRAM_CHAT_ID}" \
             --data-urlencode "text=${MSG}" 
 
+      - name: Delete processed audio file from repo
+        if: success()
+        shell: bash
+        env:
+          FILE_TO_DELETE: ${{ env.MP3_FILE }}
+        run: |
+          set -euo pipefail
+      
+          echo "Deleting file: $FILE_TO_DELETE"
+      
+          # Ensure file exists
+          if [[ ! -f "$FILE_TO_DELETE" ]]; then
+            echo "File not found, skipping delete."
+            exit 0
+          fi
+      
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      
+          # Remove file
+          git rm "$FILE_TO_DELETE"
+      
+          # Commit (only if changes exist)
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "Delete processed audio file: $(basename "$FILE_TO_DELETE")"
+          # Push back to same branch
+          git push
+          
       - name: Load IG/FB config from input.json
         env:
           CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
