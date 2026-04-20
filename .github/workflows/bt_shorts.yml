@@ -53,6 +53,7 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
+          sleep $((120 + RANDOM % 240))  # 2–6 min random delay
           MODE="dispatch"
       
           if [[ "${{ github.event_name }}" == "push" ]]; then
@@ -71,26 +72,37 @@ jobs:
           echo "INPUT_MODE=$MODE" >> "$GITHUB_ENV"
           echo "INPUT_MODE=$MODE"
 
-      # [UPDATE 2] Modified path to check ytci/$YT_DIR/audio
+      # [UPDATE 2 + CRASH FIX] Unified topic fallback and remote audio check
       - name: Set topic (dispatch vs schedule)
         shell: bash
         run: |
           set -euo pipefail
           shopt -s nullglob
-          if [[ "${{ github.event_name }}" == "schedule" ]]; then
-            echo 'TOPIC=Most trending topic of today of your choice' >> "$GITHUB_ENV"
-            # Check if any audio exists in ytci/bt/audio
+          
+          # 1. Safely capture the input topic, apply fallback if empty
+          INPUT_TOPIC="${{ inputs.topic }}"
+          if [[ -z "$INPUT_TOPIC" ]]; then
+            INPUT_TOPIC="Most trending topic of today of your choice"
+          fi
+          echo "TOPIC=$INPUT_TOPIC" >> "$GITHUB_ENV"
+
+          # 2. Route BOTH schedule and dispatch to check the remote ytci repo
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             AUDIO_FILES=("ytci/$YT_DIR/audio"/*.mp3 "ytci/$YT_DIR/audio"/*.wav "ytci/$YT_DIR/audio"/*.m4a "ytci/$YT_DIR/audio"/*.mpeg)
             if (( ${#AUDIO_FILES[@]} > 0 )); then
               echo "TEXT_CONVERSION_NEEDED=false" >> "$GITHUB_ENV"
-              echo "Audio found in ytci/bt/audio → skipping text conversion"
+              echo "Audio found in ytci/$YT_DIR/audio → skipping text conversion"
             else
               echo "TEXT_CONVERSION_NEEDED=true" >> "$GITHUB_ENV"
               echo "No audio found → text conversion needed"
             fi
           else
-            echo 'TOPIC=${{ inputs.topic }}' >> "$GITHUB_ENV"
-            echo "TEXT_CONVERSION_NEEDED=true" >> "$GITHUB_ENV"
+            # 3. For standard push events, bypass Gemini if audio/text is already present
+            if [[ "$INPUT_MODE" == "yt_audio" || "$INPUT_MODE" == "yt_txt" ]]; then
+              echo "TEXT_CONVERSION_NEEDED=false" >> "$GITHUB_ENV"
+            else
+              echo "TEXT_CONVERSION_NEEDED=true" >> "$GITHUB_ENV"
+            fi
           fi
                 
       - name: Validate channel config JSON
@@ -148,7 +160,6 @@ jobs:
 
       - name: Generate JSON (Vertex Gemini)
         if: env.TEXT_CONVERSION_NEEDED == 'true'
-        #if: env.INPUT_MODE != 'yt_txt' && env.INPUT_MODE != 'yt_audio'
         shell: bash
         env:
           LOCATION: us-central1
@@ -164,7 +175,6 @@ jobs:
 
       - name: Script_content -> WAV (TTS via ytci tts.sh + input.json)
         if: env.TEXT_CONVERSION_NEEDED == 'true'
-        #if: env.INPUT_MODE != 'yt_audio'
         shell: bash
         env:
           PROJECT_ID: ${{ env.PROJECT_ID }}
