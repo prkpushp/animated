@@ -26,6 +26,7 @@ on:
     - cron: '0 15 * * *'   # 8:30 PM IST 🔥
     - cron: '45 15 * * *'  # 9:15 PM IST 🔥
     - cron: '45 16 * * *'  # 10:15 PM IST 🔥    
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -37,6 +38,15 @@ jobs:
     steps:
       - name: Checkout animated
         uses: actions/checkout@v4
+
+      # [UPDATE 1] Moved ytci checkout up so files are available for bash evaluations
+      - name: Checkout ytci (private)
+        uses: actions/checkout@v4
+        with:
+          repository: prkpushp/ytci
+          token: ${{ secrets.CROSS_REPO_PAT }}
+          path: ytci
+          fetch-depth: 1
 
       - name: Detect input mode
         shell: bash
@@ -62,7 +72,7 @@ jobs:
           echo "INPUT_MODE=$MODE" >> "$GITHUB_ENV"
           echo "INPUT_MODE=$MODE"
 
-
+      # [UPDATE 2] Modified path to check ytci/$YT_DIR/audio
       - name: Set topic (dispatch vs schedule)
         shell: bash
         run: |
@@ -70,11 +80,11 @@ jobs:
           shopt -s nullglob
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
             echo 'TOPIC=Most trending topic of today of your choice' >> "$GITHUB_ENV"
-            # Check if any audio exists in bt/audio
-            AUDIO_FILES=("$YT_DIR/audio"/*.mp3 "$YT_DIR/audio"/*.wav "$YT_DIR/audio"/*.m4a "$YT_DIR/audio"/*.mpeg)
+            # Check if any audio exists in ytci/bt/audio
+            AUDIO_FILES=("ytci/$YT_DIR/audio"/*.mp3 "ytci/$YT_DIR/audio"/*.wav "ytci/$YT_DIR/audio"/*.m4a "ytci/$YT_DIR/audio"/*.mpeg)
             if (( ${#AUDIO_FILES[@]} > 0 )); then
               echo "TEXT_CONVERSION_NEEDED=false" >> "$GITHUB_ENV"
-              echo "Audio found in bt/audio → skipping text conversion"
+              echo "Audio found in ytci/bt/audio → skipping text conversion"
             else
               echo "TEXT_CONVERSION_NEEDED=true" >> "$GITHUB_ENV"
               echo "No audio found → text conversion needed"
@@ -84,15 +94,6 @@ jobs:
             echo "TEXT_CONVERSION_NEEDED=true" >> "$GITHUB_ENV"
           fi
                 
-
-      - name: Checkout ytci (private)
-        uses: actions/checkout@v4
-        with:
-          repository: prkpushp/ytci
-          token: ${{ secrets.CROSS_REPO_PAT }}
-          path: ytci
-          fetch-depth: 1
-
       - name: Validate channel config JSON
         run: |
           set -euo pipefail
@@ -127,7 +128,7 @@ jobs:
       - name: Verify Google Cloud authentication
         run: |
           echo '${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}' > /tmp/sa.json
-          gcloud config set project $PROJECT_ID     
+          gcloud config set project $PROJECT_ID      
           gcloud auth activate-service-account --key-file=/tmp/sa.json
           gcloud auth list
 
@@ -185,6 +186,7 @@ jobs:
           ytci/scripts/tts.sh "$TEXT" ${{ env.YT_DIR }}/input/voiceover.wav
 
       
+      # [UPDATE 3] Re-routed audio source directory to ytci for remote fetches
       - name: Pick audio file (single vs multi-wav)
         shell: bash
         run: |
@@ -194,10 +196,10 @@ jobs:
           WAV_LIST_FILE="$YT_DIR/tmp/wav_inputs.txt"
           : > "$WAV_LIST_FILE"
       
-          # Decide source directory (ONLY change for schedule)
+          # Decide source directory
           AUDIO_SOURCE_DIR="$YT_DIR"
           if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            AUDIO_SOURCE_DIR="$YT_DIR/audio"
+            AUDIO_SOURCE_DIR="ytci/$YT_DIR/audio"
           fi
       
           if [[ "${INPUT_MODE}" == "yt_audio" || "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
@@ -234,10 +236,6 @@ jobs:
           echo "MP3_FILE=$AUDIO_FILE" >> "$GITHUB_ENV"
           echo "MP3_FILE_ORIG=$AUDIO_FILE" >> "$GITHUB_ENV"
           echo "Using audio: $AUDIO_FILE"
-
-
-
-
 
       - name: Speed up audio (ffmpeg, keep extension)
         if: env.MULTI_WAV_MODE != 'true'
@@ -456,7 +454,6 @@ jobs:
               -F "caption=$(basename "$f")"
           done
 
-
       - name: Send title/description/hashtags to Telegram
         run: |
           set -euo pipefail
@@ -477,6 +474,7 @@ jobs:
             -d "chat_id=${TELEGRAM_CHAT_ID}" \
             --data-urlencode "text=${MSG}" 
 
+      # [UPDATE 4] Intelligent deletion handler depending on which repo the file originated from
       - name: Delete processed audio file from repo
         if: success()
         shell: bash
@@ -484,30 +482,40 @@ jobs:
           FILE_TO_DELETE: ${{ env.MP3_FILE_ORIG }}
         run: |
           set -euo pipefail
-      
           echo "Deleting file: $FILE_TO_DELETE"
-      
-          # Ensure file exists
+
           if [[ ! -f "$FILE_TO_DELETE" ]]; then
             echo "File not found, skipping delete."
             exit 0
           fi
-      
-          # Configure git
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-      
-          # Remove file
-          git rm "$FILE_TO_DELETE"
-      
-          # Commit (only if changes exist)
-          if git diff --cached --quiet; then
-            echo "No changes to commit."
-            exit 0
+
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Route deletion based on which repo the file belongs to
+          if [[ "$FILE_TO_DELETE" == ytci/* ]]; then
+            echo "Target is in ytci repo. Executing remote deletion..."
+            cd ytci
+            # Strip 'ytci/' prefix for git operations inside the submodule
+            REL_FILE="${FILE_TO_DELETE#ytci/}"
+            
+            git rm "$REL_FILE"
+            if git diff --cached --quiet; then
+              echo "No changes to commit."
+              exit 0
+            fi
+            git commit -m "Delete processed audio file: $(basename "$REL_FILE")"
+            git push
+          else
+            echo "Target is in local repo."
+            git rm "$FILE_TO_DELETE"
+            if git diff --cached --quiet; then
+              echo "No changes to commit."
+              exit 0
+            fi
+            git commit -m "Delete processed audio file: $(basename "$FILE_TO_DELETE")"
+            git push
           fi
-          git commit -m "Delete processed audio file: $(basename "$FILE_TO_DELETE")"
-          # Push back to same branch
-          git push
           
       - name: Load IG/FB config from input.json
         env:
