@@ -39,8 +39,7 @@ jobs:
       - name: Checkout animated
         uses: actions/checkout@v4
 
-      # [UPDATE 1] Moved ytci checkout up so files are available for bash evaluations
-      - name: Checkout ytci (private)
+      - name: Checkout ytci (private - for scripts/json)
         uses: actions/checkout@v4
         with:
           repository: prkpushp/ytci
@@ -48,12 +47,21 @@ jobs:
           path: ytci
           fetch-depth: 1
 
+      # NEW: Checkout btyt for fetching remote audio
+      - name: Checkout btyt (audio repo)
+        uses: actions/checkout@v4
+        with:
+          repository: prkpushp/btyt
+          token: ${{ secrets.CROSS_REPO_PAT }}
+          path: btyt
+          fetch-depth: 1
+
       - name: Detect input mode
         shell: bash
         run: |
           set -euo pipefail
           shopt -s nullglob
-          sleep $((120 + RANDOM % 240))  # 2–6 min random delay
+          
           MODE="dispatch"
       
           if [[ "${{ github.event_name }}" == "push" ]]; then
@@ -72,7 +80,6 @@ jobs:
           echo "INPUT_MODE=$MODE" >> "$GITHUB_ENV"
           echo "INPUT_MODE=$MODE"
 
-      # [UPDATE 2 + CRASH FIX] Unified topic fallback and remote audio check
       - name: Set topic (dispatch vs schedule)
         shell: bash
         run: |
@@ -86,12 +93,12 @@ jobs:
           fi
           echo "TOPIC=$INPUT_TOPIC" >> "$GITHUB_ENV"
 
-          # 2. Route BOTH schedule and dispatch to check the remote ytci repo
+          # 2. Route BOTH schedule and dispatch to check the remote btyt repo
           if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            AUDIO_FILES=("ytci/$YT_DIR/audio"/*.mp3 "ytci/$YT_DIR/audio"/*.wav "ytci/$YT_DIR/audio"/*.m4a "ytci/$YT_DIR/audio"/*.mpeg)
+            AUDIO_FILES=("btyt/audio"/*.mp3 "btyt/audio"/*.wav "btyt/audio"/*.m4a "btyt/audio"/*.mpeg)
             if (( ${#AUDIO_FILES[@]} > 0 )); then
               echo "TEXT_CONVERSION_NEEDED=false" >> "$GITHUB_ENV"
-              echo "Audio found in ytci/$YT_DIR/audio → skipping text conversion"
+              echo "Audio found in btyt/audio → skipping text conversion"
             else
               echo "TEXT_CONVERSION_NEEDED=true" >> "$GITHUB_ENV"
               echo "No audio found → text conversion needed"
@@ -194,8 +201,6 @@ jobs:
       
           ytci/scripts/tts.sh "$TEXT" ${{ env.YT_DIR }}/input/voiceover.wav
 
-      
-      # [UPDATE 3] Re-routed audio source directory to ytci for remote fetches
       - name: Pick audio file (single vs multi-wav)
         shell: bash
         run: |
@@ -205,10 +210,10 @@ jobs:
           WAV_LIST_FILE="$YT_DIR/tmp/wav_inputs.txt"
           : > "$WAV_LIST_FILE"
       
-          # Decide source directory
+          # Decide source directory pointing to the new btyt repo
           AUDIO_SOURCE_DIR="$YT_DIR"
           if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            AUDIO_SOURCE_DIR="ytci/$YT_DIR/audio"
+            AUDIO_SOURCE_DIR="btyt/audio"
           fi
       
           if [[ "${INPUT_MODE}" == "yt_audio" || "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
@@ -399,7 +404,7 @@ jobs:
           TMP_ROOT="${YT_DIR}/tmp"
           PARTS_DIR="${TMP_ROOT}/parts"
       
-          # Build concat list from inside bt/tmp so paths resolve correctly [web:92]
+          # Build concat list from inside bt/tmp so paths resolve correctly
           (
             cd "$TMP_ROOT"
             : > "concat_list.txt"
@@ -483,7 +488,6 @@ jobs:
             -d "chat_id=${TELEGRAM_CHAT_ID}" \
             --data-urlencode "text=${MSG}" 
 
-      # [UPDATE 4] Intelligent deletion handler depending on which repo the file originated from
       - name: Delete processed audio file from repo
         if: success()
         shell: bash
@@ -500,13 +504,16 @@ jobs:
 
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          # Set default pull behavior to rebase to avoid messy merge commits
+          git config --global pull.rebase true
 
-          # Route deletion based on which repo the file belongs to
-          if [[ "$FILE_TO_DELETE" == ytci/* ]]; then
-            echo "Target is in ytci repo. Executing remote deletion..."
-            cd ytci
-            # Strip 'ytci/' prefix for git operations inside the submodule
-            REL_FILE="${FILE_TO_DELETE#ytci/}"
+          # Target logic dynamically checking for btyt instead of ytci
+          if [[ "$FILE_TO_DELETE" == btyt/* ]]; then
+            echo "Target is in btyt repo. Executing remote deletion..."
+            cd btyt
+            # Strip 'btyt/' prefix for git operations inside the submodule
+            REL_FILE="${FILE_TO_DELETE#btyt/}"
             
             git rm "$REL_FILE"
             if git diff --cached --quiet; then
@@ -514,6 +521,11 @@ jobs:
               exit 0
             fi
             git commit -m "Delete processed audio file: $(basename "$REL_FILE")"
+            
+            # Catch up with any remote changes pushed during video generation
+            echo "Syncing with remote to avoid fetch-first rejections..."
+            git pull origin main
+            
             git push
           else
             echo "Target is in local repo."
@@ -523,6 +535,11 @@ jobs:
               exit 0
             fi
             git commit -m "Delete processed audio file: $(basename "$FILE_TO_DELETE")"
+            
+            # Catch up with any local repo changes
+            echo "Syncing with remote..."
+            git pull
+            
             git push
           fi
           
