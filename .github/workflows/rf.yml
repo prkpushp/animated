@@ -5,7 +5,7 @@ on:
     inputs:
       topic:
         description: "Topic for today's short"
-        required: false
+        required: true
         type: string
   push:
     paths:
@@ -22,18 +22,43 @@ jobs:
     env:
       YT_DIR: rf
     permissions:
-      contents: read
+      contents: write  
 
     steps:
       - name: Checkout animated
         uses: actions/checkout@v4
+
+      - name: Checkout ytci (private - for scripts/json)
+        uses: actions/checkout@v4
+        with:
+          repository: prkpushp/ytci
+          token: ${{ secrets.CROSS_REPO_PAT }}
+          path: ytci
+          fetch-depth: 1
+
+      # NEW: Checkout rfyt for fetching remote audio
+      - name: Checkout rfyt (audio repo)
+        uses: actions/checkout@v4
+        with:
+          repository: prkpushp/rfyt
+          token: ${{ secrets.CROSS_REPO_PAT }}
+          path: rfyt
+          fetch-depth: 1
 
       - name: Detect input mode
         shell: bash
         run: |
           set -euo pipefail
           shopt -s nullglob
-      
+          
+          # Skip the 2-6 min delay during manual testing for instant feedback
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
+            echo "Automated trigger detected. Applying random delay..."
+            sleep $((120 + RANDOM % 240))
+          else
+            echo "Manual dispatch detected. Skipping sleep delay."
+          fi
+          
           MODE="dispatch"
       
           if [[ "${{ github.event_name }}" == "push" ]]; then
@@ -52,25 +77,38 @@ jobs:
           echo "INPUT_MODE=$MODE" >> "$GITHUB_ENV"
           echo "INPUT_MODE=$MODE"
 
-
+      # Unified topic fallback and remote audio check
       - name: Set topic (dispatch vs schedule)
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "schedule" ]]; then
-            echo 'TOPIC=Most trending topic of today of your choice' >> "$GITHUB_ENV"
-          else
-            echo 'TOPIC=${{ inputs.topic }}' >> "$GITHUB_ENV"
+          shopt -s nullglob
+          
+          # 1. Safely capture the input topic, apply fallback if empty
+          INPUT_TOPIC="${{ inputs.topic }}"
+          if [[ -z "$INPUT_TOPIC" ]]; then
+            INPUT_TOPIC="Most trending topic of today of your choice"
           fi
-                
+          echo "TOPIC=$INPUT_TOPIC" >> "$GITHUB_ENV"
 
-      - name: Checkout ytci (private)
-        uses: actions/checkout@v4
-        with:
-          repository: prkpushp/ytci
-          token: ${{ secrets.CROSS_REPO_PAT }}
-          path: ytci
-          fetch-depth: 1
+          # 2. Route BOTH schedule and dispatch to check the remote rfyt repo
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            AUDIO_FILES=("rfyt/audio"/*.mp3 "rfyt/audio"/*.wav "rfyt/audio"/*.m4a "rfyt/audio"/*.mpeg)
+            if (( ${#AUDIO_FILES[@]} > 0 )); then
+              echo "TEXT_CONVERSION_NEEDED=false" >> "$GITHUB_ENV"
+              echo "Audio found in rfyt/audio → skipping text conversion"
+            else
+              echo "TEXT_CONVERSION_NEEDED=true" >> "$GITHUB_ENV"
+              echo "No audio found → text conversion needed"
+            fi
+          else
+            # 3. For standard push events, bypass Gemini if audio/text is already present
+            if [[ "$INPUT_MODE" == "yt_audio" || "$INPUT_MODE" == "yt_txt" ]]; then
+              echo "TEXT_CONVERSION_NEEDED=false" >> "$GITHUB_ENV"
+            else
+              echo "TEXT_CONVERSION_NEEDED=true" >> "$GITHUB_ENV"
+            fi
+          fi
 
       - name: Validate channel config JSON
         run: |
@@ -106,7 +144,7 @@ jobs:
       - name: Verify Google Cloud authentication
         run: |
           echo '${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}' > /tmp/sa.json
-          gcloud config set project $PROJECT_ID     
+          gcloud config set project $PROJECT_ID      
           gcloud auth activate-service-account --key-file=/tmp/sa.json
           gcloud auth list
           
@@ -126,7 +164,7 @@ jobs:
           mkdir -p ${{ env.YT_DIR }}/input ${{ env.YT_DIR }}/output ${{ env.YT_DIR }}/tmp ${{ env.YT_DIR }}/voiceover ${{ env.YT_DIR }}/generated_frames
 
       - name: Generate JSON (Vertex Gemini)
-        if: env.INPUT_MODE != 'yt_txt' && env.INPUT_MODE != 'yt_audio'
+        if: env.TEXT_CONVERSION_NEEDED == 'true'
         shell: bash
         env:
           LOCATION: us-central1
@@ -141,7 +179,7 @@ jobs:
           ytci/scripts/generate_voiceover_json.sh
 
       - name: Script_content -> WAV (TTS via ytci tts.sh + input.json)
-        if: env.INPUT_MODE != 'yt_audio'
+        if: env.TEXT_CONVERSION_NEEDED == 'true'
         shell: bash
         env:
           PROJECT_ID: ${{ env.PROJECT_ID }}
@@ -161,7 +199,7 @@ jobs:
       
           ytci/scripts/tts.sh "$TEXT" ${{ env.YT_DIR }}/input/voiceover.wav
 
-
+      # Re-routed audio source directory to rfyt for remote fetches
       - name: Pick audio file (single vs multi-wav)
         shell: bash
         run: |
@@ -171,10 +209,17 @@ jobs:
           WAV_LIST_FILE="$YT_DIR/tmp/wav_inputs.txt"
           : > "$WAV_LIST_FILE"
       
-          if [[ "${INPUT_MODE}" == "yt_audio" ]]; then
-            mapfile -t WAVS < <(ls -1 "$YT_DIR"/*.wav 2>/dev/null | sort -V || true)
+          # Decide source directory
+          AUDIO_SOURCE_DIR="$YT_DIR"
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            AUDIO_SOURCE_DIR="rfyt/audio"
+          fi
+      
+          if [[ "${INPUT_MODE}" == "yt_audio" || "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            mapfile -t WAVS < <(ls -1 "$AUDIO_SOURCE_DIR"/*.wav 2>/dev/null | sort -V || true)
             WAV_COUNT="${#WAVS[@]}"
       
+            # Kept RF's threshold at >= 3
             if (( WAV_COUNT >= 3 )); then
               echo "MULTI_WAV_MODE=true" >> "$GITHUB_ENV"
               printf "%s\n" "${WAVS[@]}" > "$WAV_LIST_FILE"
@@ -184,17 +229,16 @@ jobs:
               exit 0
             fi
       
-            # <3 WAVs => fall back to your single-file behavior (pick newest audio in bt/)
-            AUDIO_FILE="$(find "$YT_DIR" -maxdepth 1 -type f \
+            # <3 WAVs => pick oldest audio from source dir
+            AUDIO_FILE="$(find "$AUDIO_SOURCE_DIR" -maxdepth 1 -type f \
               '(' -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" ')' \
-              -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2- || true)"
+              -printf '%T@ %p\n' | sort -n | head -n 1 | cut -d' ' -f2- || true)"
 
           else
-            # Non-yt_audio modes: pick from generated input folder like before
-          AUDIO_FILE="$(find "$YT_DIR/input" -maxdepth 1 -type f \
-            '(' -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" ')' \
-            -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2- || true)"
-
+            # Non-yt_audio modes
+            AUDIO_FILE="$(find "$YT_DIR/input" -maxdepth 1 -type f \
+              '(' -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" ')' \
+              -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2- || true)"
           fi
       
           if [[ -z "${AUDIO_FILE:-}" ]]; then
@@ -204,11 +248,8 @@ jobs:
       
           echo "MULTI_WAV_MODE=false" >> "$GITHUB_ENV"
           echo "MP3_FILE=$AUDIO_FILE" >> "$GITHUB_ENV"
+          echo "MP3_FILE_ORIG=$AUDIO_FILE" >> "$GITHUB_ENV"
           echo "Using audio: $AUDIO_FILE"
-
-
-
-
 
       - name: Speed up audio (ffmpeg, keep extension)
         if: env.MULTI_WAV_MODE != 'true'
@@ -311,7 +352,7 @@ jobs:
             exit 0
           fi
       
-          # multi-wav: generate per-wav part mp4s into bt/tmp/parts
+          # multi-wav: generate per-wav part mp4s into rf/tmp/parts
           export ASPECT_RATIO="16:9"
           TMP_ROOT="${YT_DIR}/tmp"
           PARTS_DIR="${TMP_ROOT}/parts"
@@ -363,7 +404,7 @@ jobs:
           TMP_ROOT="${YT_DIR}/tmp"
           PARTS_DIR="${TMP_ROOT}/parts"
       
-          # Build concat list from inside bt/tmp so paths resolve correctly [web:92]
+          # Build concat list from inside rf/tmp so paths resolve correctly
           (
             cd "$TMP_ROOT"
             : > "concat_list.txt"
@@ -385,12 +426,10 @@ jobs:
           rm -f "${PARTS_DIR}/"*.mp4 || true
           rm -rf "${TMP_ROOT}/out_part_"* || true
 
-
       - name: Add disclaimer
         run: |
           chmod +x ytci/scripts/add_financial_disclaimer.sh
           ./ytci/scripts/add_financial_disclaimer.sh "${{ env.YT_DIR }}/output"
-
 
       - name: Upload outputs
         uses: actions/upload-artifact@v4
@@ -434,7 +473,6 @@ jobs:
               -F "caption=$(basename "$f")"
           done
 
-
       - name: Send title/description/hashtags to Telegram
         run: |
           set -euo pipefail
@@ -454,6 +492,62 @@ jobs:
           curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d "chat_id=${TELEGRAM_CHAT_ID}" \
             --data-urlencode "text=${MSG}"          
+
+      # Intelligent deletion handler with fetch-first protection
+      - name: Delete processed audio file from repo
+        if: success()
+        shell: bash
+        env:
+          FILE_TO_DELETE: ${{ env.MP3_FILE_ORIG }}
+        run: |
+          set -euo pipefail
+          echo "Deleting file: $FILE_TO_DELETE"
+
+          if [[ ! -f "$FILE_TO_DELETE" ]]; then
+            echo "File not found, skipping delete."
+            exit 0
+          fi
+
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          # Set default pull behavior to rebase to avoid messy merge commits
+          git config --global pull.rebase true
+
+          # Target logic dynamically checking for rfyt
+          if [[ "$FILE_TO_DELETE" == rfyt/* ]]; then
+            echo "Target is in rfyt repo. Executing remote deletion..."
+            cd rfyt
+            # Strip 'rfyt/' prefix for git operations inside the submodule
+            REL_FILE="${FILE_TO_DELETE#rfyt/}"
+            
+            git rm "$REL_FILE"
+            if git diff --cached --quiet; then
+              echo "No changes to commit."
+              exit 0
+            fi
+            git commit -m "Delete processed audio file: $(basename "$REL_FILE")"
+            
+            # Catch up with any remote changes pushed during video generation
+            echo "Syncing with remote to avoid fetch-first rejections..."
+            git pull origin main
+            
+            git push
+          else
+            echo "Target is in local repo."
+            git rm "$FILE_TO_DELETE"
+            if git diff --cached --quiet; then
+              echo "No changes to commit."
+              exit 0
+            fi
+            git commit -m "Delete processed audio file: $(basename "$FILE_TO_DELETE")"
+            
+            # Catch up with any local repo changes
+            echo "Syncing with remote..."
+            git pull
+            
+            git push
+          fi
 
       - name: Load IG/FB config from input.json
         env:
