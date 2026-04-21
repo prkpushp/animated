@@ -500,54 +500,43 @@ jobs:
           FILE_TO_DELETE: ${{ env.MP3_FILE_ORIG }}
         run: |
           set -euo pipefail
-          echo "Deleting file: $FILE_TO_DELETE"
+          echo "Processing deletion for: $FILE_TO_DELETE"
 
           if [[ ! -f "$FILE_TO_DELETE" ]]; then
-            echo "File not found, skipping delete."
+            echo "File already gone or doesn't exist, skipping."
             exit 0
           fi
 
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          
-          # Set default pull behavior to rebase to avoid messy merge commits
           git config --global pull.rebase true
 
-          # Target logic dynamically checking for btyt instead of ytci
+          # CASE 1: File is in the remote audio repo (btyt)
           if [[ "$FILE_TO_DELETE" == btyt/* ]]; then
             echo "Target is in btyt repo. Executing remote deletion..."
             cd btyt
-            # Strip 'btyt/' prefix for git operations inside the submodule
             REL_FILE="${FILE_TO_DELETE#btyt/}"
-            
             git rm "$REL_FILE"
-            if git diff --cached --quiet; then
-              echo "No changes to commit."
-              exit 0
-            fi
             git commit -m "Delete processed audio file: $(basename "$REL_FILE")"
-            
-            # Catch up with any remote changes pushed during video generation
-            echo "Syncing with remote to avoid fetch-first rejections..."
             git pull origin main
-            
             git push
+          
+          # CASE 2: File is in the local animated repo
           else
             echo "Target is in local repo."
-            git rm "$FILE_TO_DELETE"
-            if git diff --cached --quiet; then
-              echo "No changes to commit."
-              exit 0
+            # Check if Git is actually tracking this file
+            if git ls-files --error-unmatch "$FILE_TO_DELETE" > /dev/null 2>&1; then
+              echo "File is tracked by Git. Using git rm..."
+              git rm "$FILE_TO_DELETE"
+              git commit -m "Delete processed audio file: $(basename "$FILE_TO_DELETE")"
+              git pull
+              git push
+            else
+              echo "File is untracked (AI generated). Using standard rm..."
+              rm -f "$FILE_TO_DELETE"
+              echo "Untracked file deleted locally."
             fi
-            git commit -m "Delete processed audio file: $(basename "$FILE_TO_DELETE")"
-            
-            # Catch up with any local repo changes
-            echo "Syncing with remote..."
-            git pull
-            
-            git push
-          fi
-          
+          fi          
       - name: Load IG/FB config from input.json
         env:
           CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
