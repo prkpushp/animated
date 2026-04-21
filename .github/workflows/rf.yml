@@ -5,7 +5,7 @@ on:
     inputs:
       topic:
         description: "Topic for today's short"
-        required: true
+        required: false
         type: string
   push:
     paths:
