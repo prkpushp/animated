@@ -14,7 +14,7 @@ on:
       - "rf/*.txt"
       - "rf/*.m4a"
   schedule:
-    - cron: "0 19 1 1 *"   # 19:00 UTC = 00:30 IST
+    - cron: '15 15 * * *'   # 8:45 PM IST 🔥
     
 jobs:
   build:
