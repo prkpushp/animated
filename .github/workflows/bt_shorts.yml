@@ -218,7 +218,7 @@ jobs:
             mapfile -t WAVS < <(ls -1 "$AUDIO_SOURCE_DIR"/*.wav 2>/dev/null | sort -V || true)
             WAV_COUNT="${#WAVS[@]}"
       
-            if (( WAV_COUNT >= 30 )); then
+            if (( WAV_COUNT >= 5 )); then
               echo "MULTI_WAV_MODE=true" >> "$GITHUB_ENV"
               printf "%s\n" "${WAVS[@]}" > "$WAV_LIST_FILE"
               echo "WAV_LIST_FILE=$WAV_LIST_FILE" >> "$GITHUB_ENV"
