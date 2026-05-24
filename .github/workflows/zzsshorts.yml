@@ -1,7 +1,7 @@
 name: Generate zipzoom 
 
 on:
-  schedule:
+#  schedule:
 #    - cron: '30 00 * * *' # 6,9 AM IST (00:30 AM UTC)
   workflow_dispatch: # Allows manual triggering
 
