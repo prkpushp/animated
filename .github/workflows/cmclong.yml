@@ -173,26 +173,69 @@ jobs:
       
           echo "🖼 Generating image with prompt:"
           echo "$IMAGE_PROMPT"
-      
-          jq -Rs --arg prompt "$IMAGE_PROMPT" '
-            {
-              instances: [ { prompt: $prompt } ],
-              parameters: { sampleCount: 1, aspectRatio: "16:9" }
-            }' <<< "" > request_image.json
-      
-          curl -s -X POST \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -H "Content-Type: application/json" \
-            "https://us-central1-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/us-central1/publishers/google/models/imagen-4.0-fast-generate-001:predict" \
-            -d @request_image.json \
-            -o response_image.json
-      
-          IMAGE_B64=$(jq -r '.predictions[0].bytesBase64Encoded' response_image.json)
-          if [ "$IMAGE_B64" != "null" ] && [ -n "$IMAGE_B64" ]; then
-            echo "$IMAGE_B64" | base64 -d > "output/image-$TIMESTAMP.png"
-          else
-            echo "❌ Image generation failed."
-            cat response_image.json
+
+          # Imagen publisher models discontinued ~2026-06-30; Gemini Flash Image is the replacement.
+          # Override with IMAGEN_MODEL / IMAGEN_MODELS (comma-separated).
+          IMAGE_MODELS="${IMAGEN_MODEL:-${IMAGEN_MODELS:-gemini-2.5-flash-image,gemini-3.1-flash-image,imagen-4.0-fast-generate-001}}"
+          IFS=',' read -r -a MODEL_CANDIDATES <<< "$IMAGE_MODELS"
+
+          IMAGE_OK=0
+          for MODEL_ID in "${MODEL_CANDIDATES[@]}"; do
+            MODEL_ID="$(echo "$MODEL_ID" | xargs)"
+            [ -z "$MODEL_ID" ] && continue
+            echo "Trying image model: $MODEL_ID"
+
+            if [[ "$MODEL_ID" == gemini-*image* ]]; then
+              jq -n --arg prompt "$IMAGE_PROMPT" '
+                {
+                  contents: [ { role: "user", parts: [ { text: $prompt } ] } ],
+                  generationConfig: {
+                    responseModalities: ["IMAGE"],
+                    imageConfig: { aspectRatio: "16:9" }
+                  }
+                }' > request_image.json
+
+              curl -s -X POST \
+                -H "Authorization: Bearer $ACCESS_TOKEN" \
+                -H "Content-Type: application/json" \
+                "https://us-central1-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/us-central1/publishers/google/models/${MODEL_ID}:generateContent" \
+                -d @request_image.json \
+                -o response_image.json
+
+              IMAGE_B64=$(jq -r '
+                .candidates[0].content.parts[]?
+                | select(.inlineData.data != null)
+                | .inlineData.data
+              ' response_image.json | head -n1)
+            else
+              jq -n --arg prompt "$IMAGE_PROMPT" '
+                {
+                  instances: [ { prompt: $prompt } ],
+                  parameters: { sampleCount: 1, aspectRatio: "16:9" }
+                }' > request_image.json
+
+              curl -s -X POST \
+                -H "Authorization: Bearer $ACCESS_TOKEN" \
+                -H "Content-Type: application/json" \
+                "https://us-central1-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/us-central1/publishers/google/models/${MODEL_ID}:predict" \
+                -d @request_image.json \
+                -o response_image.json
+
+              IMAGE_B64=$(jq -r '.predictions[0].bytesBase64Encoded // empty' response_image.json)
+            fi
+
+            if [ -n "$IMAGE_B64" ] && [ "$IMAGE_B64" != "null" ]; then
+              echo "$IMAGE_B64" | base64 -d > "output/image-$TIMESTAMP.png"
+              echo "✓ Image generated with $MODEL_ID"
+              IMAGE_OK=1
+              break
+            fi
+            echo "⚠️  $MODEL_ID failed:"
+            cat response_image.json || true
+          done
+
+          if [ "$IMAGE_OK" -ne 1 ]; then
+            echo "❌ Image generation failed for all models: $IMAGE_MODELS"
             exit 1
           fi
       
