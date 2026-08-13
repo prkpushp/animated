@@ -3,7 +3,7 @@ name: BT New Long + Reels
 # Full pipeline for Borderline Theory:
 # - 16:9 combined YouTube long video (~8 min)
 # - 9:16 multi-part Instagram reels (split by reel_seconds)
-# Uses ytci/bt/input.json (voice Raselgethi) + ytci scripts.
+# Uses ytci/bt/input.json (voice Rasalgethi) + ytci scripts.
 
 on:
   workflow_dispatch:
@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       YT_DIR: bt
-      VOICE_NAME: Raselgethi
+      VOICE_NAME: Rasalgethi
     permissions:
       contents: write
 
@@ -133,14 +133,14 @@ jobs:
           set -euo pipefail
           jq -e . ytci/${{ env.YT_DIR }}/input.json >/dev/null
           echo "✅ ytci/${{ env.YT_DIR }}/input.json is valid JSON"
-          # Prefer voice from input.json when present; else Raselgethi
+          # Prefer voice from input.json when present; else Rasalgethi
           VOICE="$(jq -r '.voice_name // .tts.voice_name // .tts.voice // .VOICE_NAME // empty' ytci/${{ env.YT_DIR }}/input.json)"
           if [[ -n "$VOICE" && "$VOICE" != "null" ]]; then
             echo "VOICE_NAME=$VOICE" >> "$GITHUB_ENV"
             echo "Voice from input.json: $VOICE"
           else
-            echo "VOICE_NAME=Raselgethi" >> "$GITHUB_ENV"
-            echo "Voice fallback: Raselgethi"
+            echo "VOICE_NAME=Rasalgethi" >> "$GITHUB_ENV"
+            echo "Voice fallback: Rasalgethi"
           fi
 
       - name: Set up Python
@@ -207,7 +207,7 @@ jobs:
           chmod +x ytci/scripts/generate_voiceover_json.sh
           ytci/scripts/generate_voiceover_json.sh
 
-      - name: Script -> WAV (chunked TTS, voice Raselgethi / input.json)
+      - name: Script -> WAV (chunked TTS, voice Rasalgethi / input.json)
         if: env.TTS_NEEDED == 'true'
         shell: bash
         env:
@@ -219,10 +219,16 @@ jobs:
           mkdir -p ${{ env.YT_DIR }}/input ${{ env.YT_DIR }}/tmp/tts_chunks
           chmod +x ytci/scripts/tts.sh
 
+          shopt -s nullglob
           if [[ "${INPUT_MODE}" == "dispatch_script" ]]; then
             TXT_FILE="${{ env.YT_DIR }}/dispatch_script.txt"
           elif [[ "${INPUT_MODE}" == "yt_txt" ]]; then
-            TXT_FILE="$(ls -1 ${{ env.YT_DIR }}/long/*.txt ${{ env.YT_DIR }}/*.txt 2>/dev/null | head -n 1)"
+            CANDIDATES=(${{ env.YT_DIR }}/long/*.txt ${{ env.YT_DIR }}/*.txt)
+            if (( ${#CANDIDATES[@]} == 0 )); then
+              echo "❌ No .txt found under ${{ env.YT_DIR }}/long or ${{ env.YT_DIR }}"
+              exit 1
+            fi
+            TXT_FILE="${CANDIDATES[0]}"
           elif [[ -f "${{ env.YT_DIR }}/voiceover/yt.json" ]]; then
             jq -r '.script_content' ${{ env.YT_DIR }}/voiceover/yt.json > ${{ env.YT_DIR }}/tmp/script_from_json.txt
             TXT_FILE="${{ env.YT_DIR }}/tmp/script_from_json.txt"
@@ -263,15 +269,25 @@ jobs:
             ytci/scripts/tts.sh "$text" "$CHUNK_DIR/audio_$(printf '%04d' "$n").wav"
           done
 
-          ls "$CHUNK_DIR"/audio_*.wav | awk '{print "file \x27"$0"\x27"}' > "$CHUNK_DIR/list.txt"
+          shopt -s nullglob
+          WAVS=("$CHUNK_DIR"/audio_*.wav)
+          if (( ${#WAVS[@]} == 0 )); then
+            echo "❌ No TTS wav chunks produced"
+            exit 1
+          fi
+          printf "file '%s'\n" "${WAVS[@]}" > "$CHUNK_DIR/list.txt"
           ffmpeg -y -f concat -safe 0 -i "$CHUNK_DIR/list.txt" -c copy ${{ env.YT_DIR }}/input/voiceover.wav
           ls -lh ${{ env.YT_DIR }}/input/voiceover.wav
 
           # Keep script in voiceover for meta downstream
           mkdir -p ${{ env.YT_DIR }}/voiceover
           if [[ ! -f ${{ env.YT_DIR }}/voiceover/yt.json ]]; then
-            jq -n --rawfile s "$TXT_FILE" '{script_content:$s, title:"BT Long", description:"", hashtags:[]}' \
-              > ${{ env.YT_DIR }}/voiceover/yt.json
+            jq -n --rawfile s "$TXT_FILE" '{
+              script_content:$s,
+              title:("Borderline Theory | " + ($s | split("\n")[0] | .[0:80])),
+              description:$s,
+              hashtags:["#BorderlineTheory","#Geopolitics","#IndiaFirst","#shorts"]
+            }' > ${{ env.YT_DIR }}/voiceover/yt.json
           fi
 
       - name: Pick full audio file
@@ -361,6 +377,7 @@ jobs:
           CHANNEL_NAME: ${{ env.CHANNEL_NAME }}
           CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
           YT_JSON_PATH: ${{ env.YT_DIR }}/voiceover/yt.json
+          BT_JSON_PATH: ${{ env.YT_DIR }}/voiceover/yt.json
           ASPECT_RATIO: "16:9"
           MP3_FILE: ${{ env.YT_DIR }}/tmp/full_voiceover.wav
         run: |
@@ -387,6 +404,7 @@ jobs:
           CHANNEL_NAME: ${{ env.CHANNEL_NAME }}
           CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
           YT_JSON_PATH: ${{ env.YT_DIR }}/voiceover/yt.json
+          BT_JSON_PATH: ${{ env.YT_DIR }}/voiceover/yt.json
           ASPECT_RATIO: "9:16"
         run: |
           set -euo pipefail
@@ -538,15 +556,36 @@ jobs:
         env:
           INPUT_GLOB: ${{ env.YT_DIR }}/output/reels
         run: |
+          set -euo pipefail
+          shopt -s nullglob
           chmod +x ytci/scripts/upload_reel_ig.sh
           gcloud auth list
-          ./ytci/scripts/upload_reel_ig.sh
+          META="${{ env.YT_DIR }}/output/meta.json"
+          [[ -f "$META" ]] || { echo "meta.json missing for reel captions"; exit 1; }
+          # upload_reel_ig.sh picks latest mp4 + any *.json in INPUT_GLOB
+          STAGE=$(mktemp -d)
+          for f in "${{ env.YT_DIR }}/output/reels"/*.mp4; do
+            rm -rf "$STAGE"/*
+            cp "$f" "$STAGE/$(basename "$f")"
+            cp "$META" "$STAGE/meta.json"
+            INPUT_GLOB="$STAGE" ./ytci/scripts/upload_reel_ig.sh
+          done
 
       - name: Upload Reel parts to Facebook
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.upload_reels_social }}
         env:
           INPUT_GLOB: ${{ env.YT_DIR }}/output/reels
         run: |
+          set -euo pipefail
+          shopt -s nullglob
           chmod +x ytci/scripts/upload_reel_fb.sh
           gcloud auth list
-          ./ytci/scripts/upload_reel_fb.sh
+          META="${{ env.YT_DIR }}/output/meta.json"
+          [[ -f "$META" ]] || { echo "meta.json missing for reel captions"; exit 1; }
+          STAGE=$(mktemp -d)
+          for f in "${{ env.YT_DIR }}/output/reels"/*.mp4; do
+            rm -rf "$STAGE"/*
+            cp "$f" "$STAGE/$(basename "$f")"
+            cp "$META" "$STAGE/meta.json"
+            INPUT_GLOB="$STAGE" ./ytci/scripts/upload_reel_fb.sh
+          done
