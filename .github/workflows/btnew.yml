@@ -1,0 +1,552 @@
+name: BT New Long + Reels
+
+# Full pipeline for Borderline Theory:
+# - 16:9 combined YouTube long video (~8 min)
+# - 9:16 multi-part Instagram reels (split by reel_seconds)
+# Uses ytci/bt/input.json (voice Raselgethi) + ytci scripts.
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "Topic (only used if no script_text / no bt txt / no audio)"
+        required: false
+        type: string
+      script_text:
+        description: "Full Hinglish script for TTS (skips Gemini). Leave empty to use pushed bt/*.txt or Gemini topic."
+        required: false
+        type: string
+      reel_seconds:
+        description: "Target seconds per Instagram reel part"
+        required: false
+        default: "75"
+        type: string
+      upload_reels_social:
+        description: "Upload reel parts to Instagram/Facebook"
+        required: false
+        default: true
+        type: boolean
+  push:
+    paths:
+      - "bt/long/*.mp3"
+      - "bt/long/*.wav"
+      - "bt/long/*.txt"
+      - "bt/long/*.m4a"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      YT_DIR: bt
+      VOICE_NAME: Raselgethi
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout animated
+        uses: actions/checkout@v4
+
+      - name: Checkout ytci (private - for scripts/json)
+        uses: actions/checkout@v4
+        with:
+          repository: prkpushp/ytci
+          token: ${{ secrets.CROSS_REPO_PAT }}
+          path: ytci
+          fetch-depth: 1
+
+      - name: Checkout btyt (audio repo)
+        uses: actions/checkout@v4
+        with:
+          repository: prkpushp/btyt
+          token: ${{ secrets.CROSS_REPO_PAT }}
+          path: btyt
+          fetch-depth: 1
+
+      - name: Detect input mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          MODE="dispatch"
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TXT_FILES=("$YT_DIR"/long/*.txt "$YT_DIR"/*.txt)
+            AUDIO_FILES=("$YT_DIR"/long/*.mp3 "$YT_DIR"/long/*.wav "$YT_DIR"/long/*.m4a "$YT_DIR"/*.mp3 "$YT_DIR"/*.wav "$YT_DIR"/*.m4a "$YT_DIR"/*.mpeg)
+            if (( ${#TXT_FILES[@]} > 0 )); then
+              MODE="yt_txt"
+            elif (( ${#AUDIO_FILES[@]} > 0 )); then
+              MODE="yt_audio"
+            else
+              MODE="push_unknown"
+            fi
+          fi
+
+          SCRIPT_TEXT="${{ inputs.script_text }}"
+          if [[ -n "${SCRIPT_TEXT//[[:space:]]/}" ]]; then
+            MODE="dispatch_script"
+            mkdir -p "$YT_DIR"
+            printf '%s\n' "$SCRIPT_TEXT" > "$YT_DIR/dispatch_script.txt"
+            echo "Wrote dispatch_script.txt from workflow input"
+          fi
+
+          echo "INPUT_MODE=$MODE" >> "$GITHUB_ENV"
+          echo "INPUT_MODE=$MODE"
+          echo "REEL_SECONDS=${{ inputs.reel_seconds || '75' }}" >> "$GITHUB_ENV"
+
+      - name: Set topic + conversion flags
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          INPUT_TOPIC="${{ inputs.topic }}"
+          if [[ -z "$INPUT_TOPIC" ]]; then
+            INPUT_TOPIC="Most trending topic of today of your choice"
+          fi
+          echo "TOPIC=$INPUT_TOPIC" >> "$GITHUB_ENV"
+
+          # Need Gemini only when we have neither script nor audio
+          NEED_GEMINI=true
+          NEED_TTS=true
+
+          if [[ "$INPUT_MODE" == "dispatch_script" || "$INPUT_MODE" == "yt_txt" ]]; then
+            NEED_GEMINI=false
+            NEED_TTS=true
+          elif [[ "$INPUT_MODE" == "yt_audio" ]]; then
+            NEED_GEMINI=false
+            NEED_TTS=false
+          elif [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            AUDIO_FILES=("btyt/audio"/*.mp3 "btyt/audio"/*.wav "btyt/audio"/*.m4a "btyt/audio"/*.mpeg)
+            if (( ${#AUDIO_FILES[@]} > 0 )); then
+              NEED_GEMINI=false
+              NEED_TTS=false
+              echo "Audio found in btyt/audio"
+            fi
+          fi
+
+          echo "TEXT_CONVERSION_NEEDED=$NEED_GEMINI" >> "$GITHUB_ENV"
+          echo "TTS_NEEDED=$NEED_TTS" >> "$GITHUB_ENV"
+          echo "TEXT_CONVERSION_NEEDED=$NEED_GEMINI TTS_NEEDED=$NEED_TTS"
+
+      - name: Validate channel config JSON
+        run: |
+          set -euo pipefail
+          jq -e . ytci/${{ env.YT_DIR }}/input.json >/dev/null
+          echo "✅ ytci/${{ env.YT_DIR }}/input.json is valid JSON"
+          # Prefer voice from input.json when present; else Raselgethi
+          VOICE="$(jq -r '.voice_name // .tts.voice_name // .tts.voice // .VOICE_NAME // empty' ytci/${{ env.YT_DIR }}/input.json)"
+          if [[ -n "$VOICE" && "$VOICE" != "null" ]]; then
+            echo "VOICE_NAME=$VOICE" >> "$GITHUB_ENV"
+            echo "Voice from input.json: $VOICE"
+          else
+            echo "VOICE_NAME=Raselgethi" >> "$GITHUB_ENV"
+            echo "Voice fallback: Raselgethi"
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: ytci/scripts/requirements.txt
+
+      - name: Auth to Google Cloud (service account JSON)
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
+          create_credentials_file: true
+          export_environment_variables: true
+
+      - name: Set Variables from input.json
+        env:
+          CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
+        run: |
+          set -euo pipefail
+          CHANNEL_NAME="$(jq -r '.channel_name // empty' "$CHANNEL_CONFIG")"
+          [ -n "$CHANNEL_NAME" ] || { echo "channel_name missing in $CHANNEL_CONFIG"; exit 1; }
+          echo "CHANNEL_NAME=$CHANNEL_NAME" >> "$GITHUB_ENV"
+          export PROJECT_ID="$(jq -r .project_id < "${{ env.GOOGLE_APPLICATION_CREDENTIALS }}")"
+          echo "PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
+
+      - name: Verify Google Cloud authentication
+        run: |
+          echo '${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}' > /tmp/sa.json
+          gcloud config set project $PROJECT_ID
+          gcloud auth activate-service-account --key-file=/tmp/sa.json
+          gcloud auth list
+
+      - name: System dependencies (ffmpeg + fonts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core jq
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ytci/scripts/requirements.txt
+
+      - name: Prepare workspace
+        run: |
+          echo "Preparing workspace: $YT_DIR"
+          mkdir -p ${{ env.YT_DIR }}/input ${{ env.YT_DIR }}/output ${{ env.YT_DIR }}/output/reels \
+            ${{ env.YT_DIR }}/tmp ${{ env.YT_DIR }}/tmp/reel_wavs ${{ env.YT_DIR }}/voiceover \
+            ${{ env.YT_DIR }}/generated_frames
+
+      - name: Generate JSON (Vertex Gemini)
+        if: env.TEXT_CONVERSION_NEEDED == 'true'
+        shell: bash
+        env:
+          LOCATION: us-central1
+          PROJECT_ID: ${{ env.PROJECT_ID }}
+          TOPIC: ${{ env.TOPIC }}
+          CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
+          OUT_DIR: ${{ env.YT_DIR }}/voiceover
+          TMP_DIR: ${{ env.YT_DIR }}/tmp
+        run: |
+          set -euo pipefail
+          chmod +x ytci/scripts/generate_voiceover_json.sh
+          ytci/scripts/generate_voiceover_json.sh
+
+      - name: Script -> WAV (chunked TTS, voice Raselgethi / input.json)
+        if: env.TTS_NEEDED == 'true'
+        shell: bash
+        env:
+          PROJECT_ID: ${{ env.PROJECT_ID }}
+          CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
+          VOICE_NAME: ${{ env.VOICE_NAME }}
+        run: |
+          set -euo pipefail
+          mkdir -p ${{ env.YT_DIR }}/input ${{ env.YT_DIR }}/tmp/tts_chunks
+          chmod +x ytci/scripts/tts.sh
+
+          if [[ "${INPUT_MODE}" == "dispatch_script" ]]; then
+            TXT_FILE="${{ env.YT_DIR }}/dispatch_script.txt"
+          elif [[ "${INPUT_MODE}" == "yt_txt" ]]; then
+            TXT_FILE="$(ls -1 ${{ env.YT_DIR }}/long/*.txt ${{ env.YT_DIR }}/*.txt 2>/dev/null | head -n 1)"
+          elif [[ -f "${{ env.YT_DIR }}/voiceover/yt.json" ]]; then
+            jq -r '.script_content' ${{ env.YT_DIR }}/voiceover/yt.json > ${{ env.YT_DIR }}/tmp/script_from_json.txt
+            TXT_FILE="${{ env.YT_DIR }}/tmp/script_from_json.txt"
+          else
+            echo "❌ No script text found for TTS"
+            exit 1
+          fi
+
+          echo "TTS source: $TXT_FILE"
+          echo "VOICE_NAME=$VOICE_NAME"
+          export VOICE_NAME
+
+          # Chunk by ~3000 bytes (Gemini TTS limit headroom), then concat
+          CHUNK_DIR="${{ env.YT_DIR }}/tmp/tts_chunks"
+          rm -rf "$CHUNK_DIR"
+          mkdir -p "$CHUNK_DIR"
+          MAX_BYTES=3000
+          i=0
+          buf=""
+          while IFS= read -r line || [[ -n "$line" ]]; do
+            candidate="${buf}${line}"$'\n'
+            if (( $(printf %s "$candidate" | wc -c) > MAX_BYTES )); then
+              printf "%s" "$buf" > "$CHUNK_DIR/text_$(printf '%04d' "$i").txt"
+              i=$((i+1))
+              buf="${line}"$'\n'
+            else
+              buf="$candidate"
+            fi
+          done < "$TXT_FILE"
+          printf "%s" "$buf" > "$CHUNK_DIR/text_$(printf '%04d' "$i").txt"
+
+          n=0
+          for f in "$CHUNK_DIR"/text_*.txt; do
+            n=$((n+1))
+            text="$(cat "$f")"
+            [[ -n "${text//[[:space:]]/}" ]] || continue
+            echo "TTS chunk $n: $(printf %s "$text" | wc -c) bytes"
+            ytci/scripts/tts.sh "$text" "$CHUNK_DIR/audio_$(printf '%04d' "$n").wav"
+          done
+
+          ls "$CHUNK_DIR"/audio_*.wav | awk '{print "file \x27"$0"\x27"}' > "$CHUNK_DIR/list.txt"
+          ffmpeg -y -f concat -safe 0 -i "$CHUNK_DIR/list.txt" -c copy ${{ env.YT_DIR }}/input/voiceover.wav
+          ls -lh ${{ env.YT_DIR }}/input/voiceover.wav
+
+          # Keep script in voiceover for meta downstream
+          mkdir -p ${{ env.YT_DIR }}/voiceover
+          if [[ ! -f ${{ env.YT_DIR }}/voiceover/yt.json ]]; then
+            jq -n --rawfile s "$TXT_FILE" '{script_content:$s, title:"BT Long", description:"", hashtags:[]}' \
+              > ${{ env.YT_DIR }}/voiceover/yt.json
+          fi
+
+      - name: Pick full audio file
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$YT_DIR/input" "$YT_DIR/tmp"
+
+          AUDIO_SOURCE_DIR="$YT_DIR/input"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if ls "btyt/audio"/*.wav "btyt/audio"/*.mp3 "btyt/audio"/*.m4a 1>/dev/null 2>&1; then
+              # Prefer freshly generated input wav if present
+              if [[ -f "$YT_DIR/input/voiceover.wav" ]]; then
+                AUDIO_SOURCE_DIR="$YT_DIR/input"
+              else
+                AUDIO_SOURCE_DIR="btyt/audio"
+              fi
+            fi
+          elif [[ "${INPUT_MODE}" == "yt_audio" ]]; then
+            if ls "$YT_DIR"/long/*.wav "$YT_DIR"/long/*.mp3 "$YT_DIR"/long/*.m4a 1>/dev/null 2>&1; then
+              AUDIO_SOURCE_DIR="$YT_DIR/long"
+            else
+              AUDIO_SOURCE_DIR="$YT_DIR"
+            fi
+          fi
+
+          echo "Looking for audio in: $AUDIO_SOURCE_DIR"
+          AUDIO_FILE="$(find "$AUDIO_SOURCE_DIR" -maxdepth 1 -type f \
+            '(' -iname "*.mp3" -o -iname "*.wav" -o -iname "*.mpeg" -o -iname "*.m4a" ')' \
+            -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2- || true)"
+
+          if [[ -z "${AUDIO_FILE:-}" ]]; then
+            echo "❌ No audio found"
+            ls -R "$YT_DIR" || true
+            ls -R btyt/audio || true
+            exit 1
+          fi
+
+          echo "MP3_FILE=$AUDIO_FILE" >> "$GITHUB_ENV"
+          echo "MP3_FILE_ORIG=$AUDIO_FILE" >> "$GITHUB_ENV"
+          echo "✅ Using audio: $AUDIO_FILE"
+
+      - name: Normalize full audio (no speedup for long YT)
+        shell: bash
+        run: |
+          set -euo pipefail
+          IN_FILE="${MP3_FILE}"
+          mkdir -p ${{ env.YT_DIR }}/tmp
+          EXT="${IN_FILE##*.}"
+          EXT_LC="$(echo "$EXT" | tr '[:upper:]' '[:lower:]')"
+          OUT_FILE="${{ env.YT_DIR }}/tmp/full_voiceover.${EXT_LC}"
+
+          # Long-form: keep natural pace (1.0x). Copy/re-encode to wav for reliable split.
+          ffmpeg -y -i "$IN_FILE" -vn -ac 1 -ar 24000 -c:a pcm_s16le ${{ env.YT_DIR }}/tmp/full_voiceover.wav
+          echo "MP3_FILE=${{ env.YT_DIR }}/tmp/full_voiceover.wav" >> "$GITHUB_ENV"
+          DUR="$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 ${{ env.YT_DIR }}/tmp/full_voiceover.wav)"
+          echo "FULL_DURATION=$DUR" >> "$GITHUB_ENV"
+          echo "Full duration: $DUR sec"
+          ls -lh ${{ env.YT_DIR }}/tmp/full_voiceover.wav
+
+      - name: Split audio into Instagram reel parts
+        shell: bash
+        run: |
+          set -euo pipefail
+          SEG="${REEL_SECONDS:-75}"
+          IN="${{ env.YT_DIR }}/tmp/full_voiceover.wav"
+          OUT_DIR="${{ env.YT_DIR }}/tmp/reel_wavs"
+          rm -rf "$OUT_DIR"
+          mkdir -p "$OUT_DIR"
+
+          # Split by time; re-encode for reliable WAV segment cuts
+          if ! ffmpeg -y -i "$IN" -f segment -segment_time "$SEG" -reset_timestamps 1               -c:a pcm_s16le "$OUT_DIR/part_%03d.wav"; then
+            echo "Segment split failed"
+            exit 1
+          fi
+
+          mapfile -t PARTS < <(ls -1 "$OUT_DIR"/part_*.wav | sort -V)
+          echo "REEL_PART_COUNT=${#PARTS[@]}" >> "$GITHUB_ENV"
+          printf "%s\n" "${PARTS[@]}" > ${{ env.YT_DIR }}/tmp/reel_wav_list.txt
+          echo "Created ${#PARTS[@]} reel wav parts (~${SEG}s each)"
+          ls -lh "$OUT_DIR"
+
+      - name: Generate YouTube long video (16:9)
+        shell: bash
+        env:
+          LOCATION: us-central1
+          CHANNEL_NAME: ${{ env.CHANNEL_NAME }}
+          CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
+          YT_JSON_PATH: ${{ env.YT_DIR }}/voiceover/yt.json
+          ASPECT_RATIO: "16:9"
+          MP3_FILE: ${{ env.YT_DIR }}/tmp/full_voiceover.wav
+        run: |
+          set -euo pipefail
+          export FRAMES_DIR="${YT_DIR}/generated_frames/youtube"
+          export OUTPUT_DIR="${YT_DIR}/tmp/out_youtube"
+          mkdir -p "$FRAMES_DIR" "$OUTPUT_DIR" "${YT_DIR}/output"
+          python ytci/scripts/generate_shorts.py
+
+          YT_MP4="$(find "$OUTPUT_DIR" -type f -name '*.mp4' -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2- || true)"
+          [[ -n "${YT_MP4:-}" ]] || { echo "No YouTube mp4 produced"; exit 1; }
+          cp "$YT_MP4" "${YT_DIR}/output/youtube_long.mp4"
+
+          YT_JSON="$(find "$OUTPUT_DIR" -type f -name '*.json' -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2- || true)"
+          if [[ -n "${YT_JSON:-}" ]]; then
+            cp "$YT_JSON" "${YT_DIR}/output/meta.json"
+          fi
+          ls -lh "${YT_DIR}/output/youtube_long.mp4"
+
+      - name: Generate Instagram reel parts (9:16)
+        shell: bash
+        env:
+          LOCATION: us-central1
+          CHANNEL_NAME: ${{ env.CHANNEL_NAME }}
+          CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
+          YT_JSON_PATH: ${{ env.YT_DIR }}/voiceover/yt.json
+          ASPECT_RATIO: "9:16"
+        run: |
+          set -euo pipefail
+          i=0
+          while IFS= read -r wav; do
+            [[ -n "$wav" ]] || continue
+            i=$((i+1))
+            export MP3_FILE="$wav"
+            export FRAMES_DIR="${YT_DIR}/generated_frames/reel_${i}"
+            export OUTPUT_DIR="${YT_DIR}/tmp/out_reel_${i}"
+            mkdir -p "$FRAMES_DIR" "$OUTPUT_DIR" "${YT_DIR}/output/reels"
+            echo "Generating reel part $i from: $wav"
+            python ytci/scripts/generate_shorts.py
+            PART_MP4="$(find "$OUTPUT_DIR" -type f -name '*.mp4' -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2- || true)"
+            [[ -n "${PART_MP4:-}" ]] || { echo "No mp4 for reel part $i"; exit 1; }
+            mv "$PART_MP4" "${YT_DIR}/output/reels/$(printf '%03d' "$i").mp4"
+          done < "${YT_DIR}/tmp/reel_wav_list.txt"
+          ls -lh "${YT_DIR}/output/reels"
+
+      - name: Upload outputs (YouTube + reels + voiceover)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.YT_DIR }}-output-btnew-run${{ github.run_id }}
+          if-no-files-found: error
+          path: |
+            ${{ env.YT_DIR }}/output/*.mp4
+            ${{ env.YT_DIR }}/output/*.json
+            ${{ env.YT_DIR }}/output/reels/*.mp4
+            ${{ env.YT_DIR }}/input/*
+            ${{ env.YT_DIR }}/voiceover/*
+            ${{ env.YT_DIR }}/tmp/full_voiceover.wav
+            ${{ env.YT_DIR }}/tmp/reel_wavs/*.wav
+
+      - name: Load Telegram config from input.json (masked)
+        run: |
+          set -euo pipefail
+          INPUT_JSON="ytci/${{ env.YT_DIR }}/input.json"
+          TELEGRAM_BOT_TOKEN="$(jq -r '.telegram.bot_token // empty' "$INPUT_JSON")"
+          TELEGRAM_CHAT_ID="$(jq -r '.telegram.chat_id // empty' "$INPUT_JSON")"
+          [ -n "$TELEGRAM_BOT_TOKEN" ] || { echo "telegram.bot_token missing in $INPUT_JSON"; exit 1; }
+          [ -n "$TELEGRAM_CHAT_ID" ] || { echo "telegram.chat_id missing in $INPUT_JSON"; exit 1; }
+          echo "::add-mask::$TELEGRAM_BOT_TOKEN"
+          echo "TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN" >> "$GITHUB_ENV"
+          echo "TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID" >> "$GITHUB_ENV"
+
+      - name: Send YouTube + reel videos to Telegram
+        run: |
+          set -euo pipefail
+          send_vid() {
+            local f="$1"
+            curl --progress-bar --max-time 600 \
+              -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendVideo" \
+              -F "chat_id=${TELEGRAM_CHAT_ID}" \
+              -F "supports_streaming=true" \
+              -F "video=@${f}" \
+              -F "caption=$(basename "$f")"
+          }
+          send_vid "${{ env.YT_DIR }}/output/youtube_long.mp4"
+          for f in "${{ env.YT_DIR }}/output/reels/"*.mp4; do
+            [ -e "$f" ] || continue
+            send_vid "$f"
+          done
+
+      - name: Send title/description/hashtags to Telegram
+        run: |
+          set -euo pipefail
+          OUT_DIR="${{ env.YT_DIR }}/output"
+          META_JSON="$OUT_DIR/meta.json"
+          if [[ ! -f "$META_JSON" ]]; then
+            META_JSON=$(ls "$OUT_DIR"/*.json 2>/dev/null | head -1 || true)
+          fi
+          if [[ -z "${META_JSON:-}" || ! -f "$META_JSON" ]]; then
+            echo "No meta json; skipping caption message"
+            exit 0
+          fi
+          MSG="$(
+            jq -r '
+              .title,
+              "",
+              .description,
+              "",
+              ((.hashtags // []) | join(" ")),
+              "",
+              ((.hashtags // []) | map(ltrimstr("#")) | join(", "))
+            ' "$META_JSON"
+          )"
+          curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${MSG}"
+
+      - name: Delete processed audio file from repo
+        if: success()
+        shell: bash
+        env:
+          FILE_TO_DELETE: ${{ env.MP3_FILE_ORIG }}
+        run: |
+          set -euo pipefail
+          echo "Processing deletion for: $FILE_TO_DELETE"
+          if [[ ! -f "$FILE_TO_DELETE" ]]; then
+            echo "File already gone or doesn't exist, skipping."
+            exit 0
+          fi
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global pull.rebase true
+
+          if [[ "$FILE_TO_DELETE" == btyt/* ]]; then
+            cd btyt
+            REL_FILE="${FILE_TO_DELETE#btyt/}"
+            git rm "$REL_FILE"
+            git commit -m "Delete processed audio file: $(basename "$REL_FILE")"
+            git pull origin main
+            git push
+          else
+            if git ls-files --error-unmatch "$FILE_TO_DELETE" > /dev/null 2>&1; then
+              git rm "$FILE_TO_DELETE"
+              git commit -m "Delete processed audio file: $(basename "$FILE_TO_DELETE")"
+              git pull
+              git push
+            else
+              rm -f "$FILE_TO_DELETE"
+              echo "Untracked/AI file deleted locally."
+            fi
+          fi
+
+      - name: Load IG/FB config from input.json
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.upload_reels_social }}
+        env:
+          CHANNEL_CONFIG: ytci/${{ env.YT_DIR }}/input.json
+        run: |
+          set -euo pipefail
+          IG_TOKEN="$(jq -r '.instagram.access_token // empty' "$CHANNEL_CONFIG")"
+          IG_USER_ID="$(jq -r '.instagram.user_id // empty' "$CHANNEL_CONFIG")"
+          PAGE_TOKEN="$(jq -r '.facebook.access_token // empty' "$CHANNEL_CONFIG")"
+          PAGE_ID="$(jq -r '.facebook.page_id // empty' "$CHANNEL_CONFIG")"
+          [ -n "$IG_TOKEN" ] || { echo "instagram.access_token missing"; exit 1; }
+          [ -n "$IG_USER_ID" ] || { echo "instagram.user_id missing"; exit 1; }
+          echo "::add-mask::$IG_TOKEN"
+          echo "::add-mask::$PAGE_TOKEN"
+          echo "IG_ACCESS_TOKEN=$IG_TOKEN" >> "$GITHUB_ENV"
+          echo "ACCESS_TOKEN=$IG_TOKEN" >> "$GITHUB_ENV"
+          echo "IG_USER_ID=$IG_USER_ID" >> "$GITHUB_ENV"
+          echo "BUCKET=$PROJECT_ID" >> "$GITHUB_ENV"
+          echo "PAGE_TOKEN=$PAGE_TOKEN" >> "$GITHUB_ENV"
+          echo "PAGE_ID=$PAGE_ID" >> "$GITHUB_ENV"
+
+      - name: Upload Reel parts to Instagram
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.upload_reels_social }}
+        env:
+          INPUT_GLOB: ${{ env.YT_DIR }}/output/reels
+        run: |
+          chmod +x ytci/scripts/upload_reel_ig.sh
+          gcloud auth list
+          ./ytci/scripts/upload_reel_ig.sh
+
+      - name: Upload Reel parts to Facebook
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.upload_reels_social }}
+        env:
+          INPUT_GLOB: ${{ env.YT_DIR }}/output/reels
+        run: |
+          chmod +x ytci/scripts/upload_reel_fb.sh
+          gcloud auth list
+          ./ytci/scripts/upload_reel_fb.sh
