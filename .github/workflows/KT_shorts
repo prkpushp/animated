@@ -22,6 +22,7 @@ jobs:
     env:
       YT_DIR: kt
     permissions:
+      id-token: write
       contents: read
 
     steps:
@@ -85,10 +86,13 @@ jobs:
           cache: "pip"
           cache-dependency-path: ytci/scripts/requirements.txt
 
-      - name: Auth to Google Cloud (service account JSON)
+      - name: Authenticate to Google Cloud (WIF)
+        id: auth
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}
+          workload_identity_provider: projects/984058527118/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-actions@project-1ecc0a85-35dd-4da5-85a.iam.gserviceaccount.com
+          project_id: project-1ecc0a85-35dd-4da5-85a
           create_credentials_file: true
           export_environment_variables: true
 
@@ -96,7 +100,7 @@ jobs:
         run: |
           set -euo pipefail
           gcloud auth list
-          export PROJECT_ID="$(jq -r .project_id < "${{ env.GOOGLE_APPLICATION_CREDENTIALS }}")"
+          export PROJECT_ID="project-1ecc0a85-35dd-4da5-85a"
           echo "PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
 
       - name: System dependencies (ffmpeg + fonts)

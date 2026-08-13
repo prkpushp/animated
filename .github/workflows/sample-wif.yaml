@@ -1,4 +1,4 @@
-name: Validate GCP Access
+name: Validate GCP Access (WIF)
 
 on:
   workflow_dispatch:
@@ -15,43 +15,29 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
+      - name: Authenticate to Google Cloud (WIF)
         id: auth
         uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: projects/984058527118/locations/global/workloadIdentityPools/testpool/providers/github
-          service_account: research-pushp-prk@project-1ecc0a85-35dd-4da5-85a.iam.gserviceaccount.com
+          workload_identity_provider: projects/984058527118/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-actions@project-1ecc0a85-35dd-4da5-85a.iam.gserviceaccount.com
+          project_id: project-1ecc0a85-35dd-4da5-85a
+          create_credentials_file: true
+          export_environment_variables: true
 
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: project-1ecc0a85-35dd-4da5-85a
 
       - name: Verify authentication
         run: |
+          set -euo pipefail
           echo "Authenticated account:"
           gcloud auth list
-
-      - name: Display active project
-        run: |
           gcloud config list
-
-      - name: Print access token
-        run: |
           gcloud auth print-access-token | head -c 40
           echo "..."
-
-      - name: List projects
-        run: |
-          gcloud projects list
-
-      - name: List enabled services
-        run: |
-          gcloud services list --enabled
-
-      - name: List Cloud Storage buckets
-        run: |
-          gcloud storage buckets list || true
-
-      - name: Describe current service account
-        run: |
+          gcloud projects describe project-1ecc0a85-35dd-4da5-85a --format='value(projectId)'
           gcloud iam service-accounts describe \
-            YOUR_SERVICE_ACCOUNT@YOUR_PROJECT_ID.iam.gserviceaccount.com
+            github-actions@project-1ecc0a85-35dd-4da5-85a.iam.gserviceaccount.com
